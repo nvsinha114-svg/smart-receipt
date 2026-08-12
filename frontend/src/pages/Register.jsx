@@ -1,0 +1,10 @@
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { ScanLine } from "lucide-react";
+import { register } from "../services/authService";
+
+export default function Register() {
+  const navigate=useNavigate(), [form,setForm]=useState({name:"",email:"",password:"",confirmPassword:""}), [error,setError]=useState(""), [loading,setLoading]=useState(false);
+  const submit=async(e)=>{e.preventDefault();setError("");if(form.password!==form.confirmPassword)return setError("Passwords do not match.");setLoading(true);try{await register({name:form.name,email:form.email,password:form.password});navigate("/login")}catch(err){setError(err.response?.data?.message||"Registration failed")}finally{setLoading(false)}};
+  return <div className="auth-page"><div className="auth-brand"><div className="brand-mark"><ScanLine/></div><strong>Smart Receipt</strong></div><div className="auth-card"><h1>Create account</h1><p>Start managing your receipts smarter.</p><form onSubmit={submit} className="auth-form">{error&&<div className="alert error">{error}</div>}<label>Name<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></label><label>Email<input type="email" required value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></label><label>Password<input type="password" minLength="6" required value={form.password} onChange={e=>setForm({...form,password:e.target.value})}/></label><label>Confirm password<input type="password" required value={form.confirmPassword} onChange={e=>setForm({...form,confirmPassword:e.target.value})}/></label><button className="primary-btn full" disabled={loading}>{loading?"Creating...":"Create account"}</button><p className="auth-switch">Already have an account? <Link to="/login">Sign in</Link></p></form></div></div>
+}
