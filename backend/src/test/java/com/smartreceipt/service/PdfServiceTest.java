@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PdfServiceTest {
 
-    private final PdfService pdfService = new PdfService();
+    private final PdfService pdfService = new PdfService(new ReceiptService(null));
 
     @Test
     @DisplayName("Should generate valid non-empty PDF byte array")

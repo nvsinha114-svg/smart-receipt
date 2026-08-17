@@ -14,6 +14,6 @@ export default function UploadReceipt(){
       {error&&<div className="alert error">{error}</div>}
       {file&&<button className="primary-btn full upload-submit" onClick={(e)=>{e.stopPropagation();submit()}} disabled={busy}>{busy?"Processing OCR...":"Upload & extract"}</button>}
     </div>
-    <div className="card tips"><h3>What happens next?</h3><div className="tip"><span>1</span><p>Your file is processed temporarily.</p></div><div className="tip"><span>2</span><p>Tesseract OCR extracts readable receipt text.</p></div><div className="tip"><span>3</span><p>Detected receipt data is saved to MongoDB.</p></div>{result&&<div className="alert success"><CheckCircle2 size={17}/> Receipt processed successfully. {result.id&&<Link to={`/receipts/${result.id}`}>View receipt</Link>}</div>}</div></div>
+    <div className="card tips"><h3>What happens next?</h3><div className="tip"><span>1</span><p>Your file is processed temporarily.</p></div><div className="tip"><span>2</span><p>Tesseract OCR extracts readable receipt text.</p></div><div className="tip"><span>3</span><p>Detected receipt data is saved to MongoDB.</p></div>{result&&<div className="alert success"><CheckCircle2 size={17}/> Receipt processed successfully. {result.totalAmount !== null && result.totalAmount !== undefined ? `Extracted total: ₹${Number(result.totalAmount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.` : "Total could not be detected."} {result.id&&<Link to={`/receipts/${result.id}`}>View receipt</Link>}</div>}</div></div>
   </div>
 }

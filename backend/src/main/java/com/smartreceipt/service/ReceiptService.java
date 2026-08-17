@@ -13,6 +13,7 @@ import com.smartreceipt.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,11 +27,13 @@ public class ReceiptService {
 
     public ReceiptResponse createReceipt(ReceiptRequest request, UserPrincipal currentUser) {
         List<ReceiptItem> items = mapItemsToEntity(request.getItems());
+        Receipt temp = Receipt.builder().items(items).totalAmount(request.getTotalAmount()).build();
+        BigDecimal effectiveTotal = calculateEffectiveTotal(temp);
 
         Receipt receipt = Receipt.builder()
                 .merchantName(request.getMerchantName())
                 .receiptDate(request.getReceiptDate())
-                .totalAmount(request.getTotalAmount())
+                .totalAmount(effectiveTotal)
                 .items(items)
                 .userId(currentUser.getId())
                 .createdAt(LocalDateTime.now())
@@ -58,10 +61,13 @@ public class ReceiptService {
     public ReceiptResponse updateReceipt(String id, ReceiptRequest request, UserPrincipal currentUser) {
         Receipt receipt = findReceiptEntityById(id, currentUser);
 
+        List<ReceiptItem> items = mapItemsToEntity(request.getItems());
         receipt.setMerchantName(request.getMerchantName());
         receipt.setReceiptDate(request.getReceiptDate());
-        receipt.setTotalAmount(request.getTotalAmount());
-        receipt.setItems(mapItemsToEntity(request.getItems()));
+        receipt.setItems(items);
+        
+        Receipt temp = Receipt.builder().items(items).totalAmount(request.getTotalAmount()).build();
+        receipt.setTotalAmount(calculateEffectiveTotal(temp));
 
         Receipt updated = receiptRepository.save(receipt);
         return mapToResponse(updated);
@@ -87,6 +93,9 @@ public class ReceiptService {
     }
 
     public ReceiptResponse saveReceiptEntity(Receipt receipt) {
+        if (receipt.getItems() != null && !receipt.getItems().isEmpty()) {
+            receipt.setTotalAmount(calculateEffectiveTotal(receipt));
+        }
         Receipt saved = receiptRepository.save(receipt);
         return mapToResponse(saved);
     }
@@ -101,15 +110,36 @@ public class ReceiptService {
                                 .build())
                         .collect(Collectors.toList()) : new ArrayList<>();
 
+        BigDecimal effectiveTotal = calculateEffectiveTotal(receipt);
+
         return ReceiptResponse.builder()
                 .id(receipt.getId())
                 .merchantName(receipt.getMerchantName())
                 .receiptDate(receipt.getReceiptDate())
-                .totalAmount(receipt.getTotalAmount())
+                .totalAmount(effectiveTotal)
                 .items(itemDtos)
                 .userId(receipt.getUserId())
                 .createdAt(receipt.getCreatedAt())
                 .build();
+    }
+
+    public BigDecimal calculateEffectiveTotal(Receipt receipt) {
+        if (receipt.getItems() != null && !receipt.getItems().isEmpty()) {
+            BigDecimal itemsSum = receipt.getItems().stream()
+                    .map(item -> {
+                        BigDecimal qty = BigDecimal.valueOf(item.getQuantity() != null ? item.getQuantity() : 1);
+                        BigDecimal price = item.getPrice() != null ? item.getPrice() : BigDecimal.ZERO;
+                        return price.multiply(qty);
+                    })
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            if (itemsSum.compareTo(BigDecimal.ZERO) > 0) {
+                if (receipt.getTotalAmount() == null || itemsSum.compareTo(receipt.getTotalAmount()) > 0 || receipt.getTotalAmount().compareTo(BigDecimal.ZERO) == 0) {
+                    return itemsSum;
+                }
+            }
+        }
+        return receipt.getTotalAmount();
     }
 
     private List<ReceiptItem> mapItemsToEntity(List<ReceiptItemDto> dtos) {

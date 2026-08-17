@@ -26,7 +26,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -35,7 +34,6 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -69,6 +67,8 @@ public class OcrService {
             Receipt receipt = parseTextToReceipt(extractedText);
             receipt.setUserId(currentUser.getId());
             receipt.setCreatedAt(LocalDateTime.now());
+
+            log.info("Final extracted total amount for file {}: {}", originalFilename, receipt.getTotalAmount());
 
             Receipt saved = receiptRepository.save(receipt);
             return receiptService.mapToResponse(saved);
@@ -160,13 +160,37 @@ public class OcrService {
 
         String merchantName = parseMerchantName(text);
         LocalDate receiptDate = parseReceiptDate(text);
-        BigDecimal totalAmount = parseTotalAmount(text);
+        BigDecimal extractedTotal = parseTotalAmount(text);
         List<ReceiptItem> items = parseReceiptItems(text);
+
+        // Compute sum of item subtotals: sum(quantity * price)
+        BigDecimal itemsSum = null;
+        if (items != null && !items.isEmpty()) {
+            itemsSum = items.stream()
+                    .map(item -> {
+                        BigDecimal qty = BigDecimal.valueOf(item.getQuantity() != null ? item.getQuantity() : 1);
+                        BigDecimal price = item.getPrice() != null ? item.getPrice() : BigDecimal.ZERO;
+                        return price.multiply(qty);
+                    })
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+
+        // Determine final totalAmount:
+        // If items exist and itemsSum > 0:
+        //   - If extractedTotal is null or itemsSum > extractedTotal or extractedTotal <= 0:
+        //     use itemsSum!
+        BigDecimal finalTotal = extractedTotal;
+        if (itemsSum != null && itemsSum.compareTo(BigDecimal.ZERO) > 0) {
+            if (extractedTotal == null || itemsSum.compareTo(extractedTotal) > 0 || extractedTotal.compareTo(BigDecimal.ZERO) <= 0) {
+                finalTotal = itemsSum;
+                log.info("Dynamically calculated totalAmount from item subtotals: {}", finalTotal);
+            }
+        }
 
         return Receipt.builder()
                 .merchantName(merchantName)
                 .receiptDate(receiptDate)
-                .totalAmount(totalAmount)
+                .totalAmount(finalTotal)
                 .items(items)
                 .build();
     }
@@ -183,7 +207,6 @@ public class OcrService {
     }
 
     public LocalDate parseReceiptDate(String text) {
-        // Match standard date formats: YYYY-MM-DD, MM/DD/YYYY, DD-MM-YYYY, Month DD, YYYY
         List<Pattern> datePatterns = List.of(
                 Pattern.compile("(?i)\\b(\\d{4}[-/]\\d{1,2}[-/]\\d{1,2})\\b"),
                 Pattern.compile("(?i)\\b(\\d{1,2}[-/]\\d{1,2}[-/]\\d{2,4})\\b"),
@@ -225,67 +248,246 @@ public class OcrService {
         return null;
     }
 
+    /**
+     * Tiered priority model for candidate total extraction.
+     */
+    private static class TotalCandidate {
+        int tier; // 1 = Grand Total, 2 = Total Amount / Net Amount / Amount Payable, 3 = Total / Payable / Balance Due
+        int lineIndex;
+        BigDecimal amount;
+        String lineContent;
+
+        TotalCandidate(int tier, int lineIndex, BigDecimal amount, String lineContent) {
+            this.tier = tier;
+            this.lineIndex = lineIndex;
+            this.amount = amount;
+            this.lineContent = lineContent;
+        }
+    }
+
     public BigDecimal parseTotalAmount(String text) {
-        // Look for lines containing TOTAL, GRAND TOTAL, AMOUNT DUE, NET followed by a number
-        Pattern totalPattern = Pattern.compile("(?i)(?:total|grand\\s+total|amount\\s+due|net\\s+amount|subtotal)[^0-9\\$]*\\$?\\s*([0-9]+\\.[0-9]{2})");
-        Matcher matcher = totalPattern.matcher(text);
-        BigDecimal lastFound = null;
+        if (text == null || text.trim().isEmpty()) {
+            return null;
+        }
+
+        String[] lines = text.split("\r?\n");
+        log.debug("--- OCR PARSING DEBUG: Analyzing {} raw lines ---", lines.length);
+
+        // Keywords for Priority Tiers
+        Pattern tier1Pattern = Pattern.compile("(?i)\\b(grand\\s*total)\\b");
+        Pattern tier2Pattern = Pattern.compile("(?i)\\b(total\\s*amount|net\\s*amount|net\\s*total|amount\\s*payable|payable\\s*amount|final\\s*amount)\\b");
+        Pattern tier3Pattern = Pattern.compile("(?i)\\b(total|payable|balance\\s*due|amount\\s*due)\\b");
+
+        // Keywords that disqualify a line from being a main total line
+        Pattern excludePattern = Pattern.compile("(?i)\\b(subtotal|sub\\s*total|sub-total|tax|cgst|sgst|igst|vat|discount|round\\s*off|cash|change|tendered|items|qty|quantity|invoice|gstin|phone|tel|zip|pin|account|card)\\b");
+
+        List<TotalCandidate> candidates = new ArrayList<>();
+
+        for (int i = 0; i < lines.length; i++) {
+            String rawLine = lines[i].trim();
+            if (rawLine.isEmpty()) {
+                continue;
+            }
+
+            boolean hasExclusion = excludePattern.matcher(rawLine).find();
+            boolean isTier1 = tier1Pattern.matcher(rawLine).find();
+            boolean isTier2 = tier2Pattern.matcher(rawLine).find();
+            boolean isTier3 = tier3Pattern.matcher(rawLine).find();
+
+            if (hasExclusion && !isTier1 && !isTier2) {
+                // Skip subtotal/tax lines even if "total" matches inside word
+                continue;
+            }
+
+            int tier = 0;
+            if (isTier1) {
+                tier = 1;
+            } else if (isTier2) {
+                tier = 2;
+            } else if (isTier3) {
+                tier = 3;
+            }
+
+            if (tier > 0) {
+                BigDecimal extracted = extractMonetaryValueFromLine(rawLine);
+                if (extracted == null && i + 1 < lines.length) {
+                    // Check next line if total label is standalone on its own line
+                    extracted = extractMonetaryValueFromLine(lines[i + 1].trim());
+                }
+
+                if (extracted != null && extracted.compareTo(BigDecimal.ZERO) > 0) {
+                    candidates.add(new TotalCandidate(tier, i, extracted, rawLine));
+                    log.debug("Candidate detected [Tier {}] line {}: '{}' -> Amount: {}", tier, i, rawLine, extracted);
+                }
+            }
+        }
+
+        if (!candidates.isEmpty()) {
+            // Sort by tier ascending (1 first), then lineIndex descending (prefer later lines near bottom)
+            candidates.sort((c1, c2) -> {
+                if (c1.tier != c2.tier) {
+                    return Integer.compare(c1.tier, c2.tier);
+                }
+                return Integer.compare(c2.lineIndex, c1.lineIndex);
+            });
+
+            TotalCandidate selected = candidates.get(0);
+            log.info("OCR Total Extraction SUCCESS: Selected Tier {} candidate: '{}' -> {}", selected.tier, selected.lineContent, selected.amount);
+            return selected.amount;
+        }
+
+        // Fallback Heuristic when explicit total labels are missing
+        log.debug("No explicit total label found. Running fallback monetary heuristics...");
+        BigDecimal fallbackAmount = extractFallbackTotal(lines, excludePattern);
+        if (fallbackAmount != null) {
+            log.info("OCR Total Extraction FALLBACK SUCCESS: Found monetary total -> {}", fallbackAmount);
+            return fallbackAmount;
+        }
+
+        log.warn("OCR Total Extraction UNRESOLVED: Could not confidently detect total amount. Returning null.");
+        return null;
+    }
+
+    private BigDecimal extractFallbackTotal(String[] lines, Pattern excludePattern) {
+        for (int i = lines.length - 1; i >= 0; i--) {
+            String line = lines[i].trim();
+            if (line.isEmpty() || excludePattern.matcher(line).find()) {
+                continue;
+            }
+
+            if (line.matches("(?i).*(date|inv|invoice|gst|tel|ph|phone|st#|store|table|bill).*")) {
+                continue;
+            }
+
+            BigDecimal amount = extractMonetaryValueFromLine(line);
+            if (amount != null && amount.compareTo(BigDecimal.ZERO) > 0) {
+                if (isPlausibleTotalAmount(amount, line)) {
+                    return amount;
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean isPlausibleTotalAmount(BigDecimal amount, String line) {
+        double val = amount.doubleValue();
+        if ((val >= 2020 && val <= 2035) && (line.contains("-") || line.contains("/"))) {
+            return false;
+        }
+        if (val > 10000000) {
+            return false;
+        }
+        return true;
+    }
+
+    private BigDecimal extractMonetaryValueFromLine(String line) {
+        if (line == null || line.trim().isEmpty()) {
+            return null;
+        }
+
+        // Matches currency symbol optionally followed by digits/OCR-chars
+        Pattern pattern = Pattern.compile("(?i)(?:₹|rs\\.?|inr|\\$)?\\s*([0-9OISlB,\\.\\s]+)");
+        Matcher matcher = pattern.matcher(line);
+
+        BigDecimal bestCandidate = null;
 
         while (matcher.find()) {
-            try {
-                lastFound = new BigDecimal(matcher.group(1));
-            } catch (NumberFormatException ignored) {
-            }
-        }
-
-        if (lastFound != null) {
-            return lastFound;
-        }
-
-        // Fallback: search for prices at line ends
-        Pattern pricePattern = Pattern.compile("\\$\\s*([0-9]+\\.[0-9]{2})");
-        Matcher priceMatcher = pricePattern.matcher(text);
-        BigDecimal maxPrice = null;
-        while (priceMatcher.find()) {
-            try {
-                BigDecimal val = new BigDecimal(priceMatcher.group(1));
-                if (maxPrice == null || val.compareTo(maxPrice) > 0) {
-                    maxPrice = val;
+            String token = matcher.group(1).trim();
+            BigDecimal parsed = parseAndNormalizeMonetaryToken(token);
+            if (parsed != null && parsed.compareTo(BigDecimal.ZERO) > 0) {
+                if (bestCandidate == null || parsed.compareTo(bestCandidate) > 0) {
+                    bestCandidate = parsed;
                 }
-            } catch (NumberFormatException ignored) {
             }
         }
-        return maxPrice;
+        return bestCandidate;
+    }
+
+    private BigDecimal parseAndNormalizeMonetaryToken(String token) {
+        if (token == null) return null;
+
+        String clean = token.replaceAll("^[^0-9OISlB]+|[^0-9OISlB]+$", "");
+        if (clean.isEmpty()) return null;
+
+        // Normalize common OCR character typos inside numeric candidates
+        String normalizedDigits = clean
+                .replace('O', '0')
+                .replace('o', '0')
+                .replace('I', '1')
+                .replace('l', '1')
+                .replace('L', '1')
+                .replace('S', '5')
+                .replace('s', '5')
+                .replace('B', '8');
+
+        normalizedDigits = normalizedDigits.replaceAll("\\s+", "");
+
+        if (normalizedDigits.matches("^[0-9]+,[0-9]{1,2}$")) {
+            normalizedDigits = normalizedDigits.replace(',', '.');
+        } else {
+            normalizedDigits = normalizedDigits.replace(",", "");
+        }
+
+        if (!normalizedDigits.matches("^[0-9]+(\\.[0-9]{1,4})?$")) {
+            return null;
+        }
+
+        try {
+            BigDecimal val = new BigDecimal(normalizedDigits);
+            if (normalizedDigits.length() > 1 && normalizedDigits.startsWith("0") && !normalizedDigits.startsWith("0.")) {
+                return null;
+            }
+            return val;
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     public List<ReceiptItem> parseReceiptItems(String text) {
         List<ReceiptItem> items = new ArrayList<>();
         String[] lines = text.split("\r?\n");
 
-        // Pattern 1: Item Name [Qty] Price (e.g. Milk 2 4.50 or Milk 4.50)
-        Pattern itemPattern = Pattern.compile("^([A-Za-z0-9\\s\\-\\.,]+?)\\s+(?:(\\d+)\\s+)?\\$?\\s*([0-9]+\\.[0-9]{2})$");
+        Pattern itemPattern = Pattern.compile("(?i)^([^0-9\\$₹\\n\\r]+?)\\s*:?\\s+(?:(\\d+)\\s+)?(?:₹|rs\\.?|inr|\\$)?\\s*([0-9OISlB,\\.\\s]+)$");
 
         for (String line : lines) {
             String trimmed = line.trim();
-            if (trimmed.toLowerCase().contains("total") || trimmed.toLowerCase().contains("subtotal")
-                    || trimmed.toLowerCase().contains("tax") || trimmed.toLowerCase().contains("change")) {
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+
+            String lower = trimmed.toLowerCase();
+            if (lower.contains("subtotal") || lower.contains("sub total")
+                    || lower.contains("tax") || lower.contains("cgst") || lower.contains("sgst")
+                    || lower.contains("igst") || lower.contains("change") || lower.contains("grand total")
+                    || lower.contains("amount payable") || lower.contains("net amount")
+                    || lower.startsWith("sem") || lower.startsWith("semester") || lower.startsWith("receipt id")
+                    || lower.startsWith("receipt no") || lower.startsWith("invoice") || lower.startsWith("date")
+                    || lower.startsWith("page") || lower.startsWith("table") || lower.startsWith("store")) {
                 continue;
             }
 
             Matcher matcher = itemPattern.matcher(trimmed);
             if (matcher.find()) {
-                String itemName = matcher.group(1).trim();
+                String rawName = matcher.group(1).trim();
                 String qtyStr = matcher.group(2);
                 String priceStr = matcher.group(3);
 
-                if (!itemName.isEmpty()) {
-                    int qty = qtyStr != null ? Integer.parseInt(qtyStr) : 1;
-                    BigDecimal price = new BigDecimal(priceStr);
-                    items.add(ReceiptItem.builder()
-                            .name(itemName)
-                            .quantity(qty)
-                            .price(price)
-                            .build());
+                String itemName = rawName.replaceAll("[:\\-=\\.]+$", "").trim();
+
+                if (!itemName.isEmpty() && priceStr != null) {
+                    if (itemName.matches("(?i)^(sem|semester|receipt|date|page|invoice|bill|table|store|ph|phone|tel).*")) {
+                        continue;
+                    }
+
+                    BigDecimal price = parseAndNormalizeMonetaryToken(priceStr);
+                    if (price != null && price.compareTo(BigDecimal.ZERO) > 0) {
+                        int qty = (qtyStr != null && !qtyStr.isEmpty()) ? Integer.parseInt(qtyStr) : 1;
+                        items.add(ReceiptItem.builder()
+                                .name(itemName)
+                                .quantity(qty)
+                                .price(price)
+                                .build());
+                    }
                 }
             }
         }
@@ -322,7 +524,6 @@ public class OcrService {
             }
             File engFile = new File(tessDataDir, tesseractLanguage + ".traineddata");
             if (!engFile.exists()) {
-                // Look for traineddata in classpath
                 try (InputStream is = getClass().getResourceAsStream("/tessdata/" + tesseractLanguage + ".traineddata")) {
                     if (is != null) {
                         Files.copy(is, engFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
@@ -335,3 +536,4 @@ public class OcrService {
         }
     }
 }
+

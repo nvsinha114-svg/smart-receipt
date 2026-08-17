@@ -13,6 +13,7 @@ import com.lowagie.text.pdf.PdfWriter;
 import com.smartreceipt.entity.Receipt;
 import com.smartreceipt.entity.ReceiptItem;
 import com.smartreceipt.exception.OcrException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.awt.Color;
@@ -23,7 +24,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Service
+@RequiredArgsConstructor
 public class PdfService {
+
+    private final ReceiptService receiptService;
 
     public byte[] generateReceiptPdf(Receipt receipt) {
         Document document = new Document();
@@ -72,8 +76,8 @@ public class PdfService {
             // Table Headers
             addTableHeader(table, "Item Name", boldFont);
             addTableHeader(table, "Qty", boldFont);
-            addTableHeader(table, "Unit Price ($)", boldFont);
-            addTableHeader(table, "Subtotal ($)", boldFont);
+            addTableHeader(table, "Unit Price (\u20B9)", boldFont);
+            addTableHeader(table, "Subtotal (\u20B9)", boldFont);
 
             List<ReceiptItem> items = receipt.getItems();
             if (items != null && !items.isEmpty()) {
@@ -83,9 +87,9 @@ public class PdfService {
                     BigDecimal subtotal = price.multiply(qty);
 
                     table.addCell(new PdfPCell(new Phrase(item.getName() != null ? item.getName() : "Item", normalFont)));
-                    table.addCell(new PdfPCell(new Phrase(String.valueOf(qty), normalFont)));
-                    table.addCell(new PdfPCell(new Phrase(String.format("%.2f", price), normalFont)));
-                    table.addCell(new PdfPCell(new Phrase(String.format("%.2f", subtotal), normalFont)));
+                    table.addCell(new PdfPCell(new Phrase(String.valueOf(qty.intValue()), normalFont)));
+                    table.addCell(new PdfPCell(new Phrase(String.format("Rs. %,.2f", price), normalFont)));
+                    table.addCell(new PdfPCell(new Phrase(String.format("Rs. %,.2f", subtotal), normalFont)));
                 }
             } else {
                 PdfPCell emptyCell = new PdfPCell(new Phrase("No items recorded", normalFont));
@@ -99,9 +103,10 @@ public class PdfService {
             // Total Amount Summary
             Paragraph totalPara = new Paragraph();
             totalPara.setAlignment(Element.ALIGN_RIGHT);
-            BigDecimal total = receipt.getTotalAmount() != null ? receipt.getTotalAmount() : BigDecimal.ZERO;
+            BigDecimal total = receiptService != null ? receiptService.calculateEffectiveTotal(receipt) : receipt.getTotalAmount();
+            if (total == null) total = receipt.getTotalAmount();
             totalPara.add(new Phrase("Total Amount: ", subTitleFont));
-            totalPara.add(new Phrase("$" + String.format("%.2f", total), titleFont));
+            totalPara.add(new Phrase(total != null ? String.format("Rs. %,.2f", total) : "Not detected", titleFont));
             document.add(totalPara);
 
             document.close();

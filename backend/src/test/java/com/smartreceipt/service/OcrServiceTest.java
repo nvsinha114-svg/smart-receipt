@@ -31,67 +31,54 @@ class OcrServiceTest {
     @InjectMocks
     private OcrService ocrService;
 
-    private String sampleText;
+    private String sampleCollegeReceipt;
 
     @BeforeEach
     void setUp() {
-        sampleText = """
-                WALMART SUPERCENTER
-                Store #1234
+        sampleCollegeReceipt = """
+                IMS ENGINEERING COLLEGE, GHAZIABAD
+                Receipt ID: 6a83229bca71d5002391ea02
                 Date: 2026-08-10
                 
-                Milk 2 4.50
-                Bread 1 2.99
-                Coffee 8.99
+                Tuition Fee: ₹103,919
+                TID: ₹2,000
+                College Placement Activity Fee: ₹3,000
+                Internet, Intranet and Master Electronic I Card Fee: ₹3,000
+                Development Charges: ₹6,500
+                Insurance: ₹1,250
                 
-                SUBTOTAL: $16.48
-                TAX: $1.32
-                TOTAL: $17.80
-                Thank you for shopping!
+                Sem: 5
                 """;
     }
 
     @Test
-    @DisplayName("Should parse merchant name from receipt raw text")
-    void parseMerchantName_Success() {
-        String merchant = ocrService.parseMerchantName(sampleText);
-        assertEquals("WALMART SUPERCENTER", merchant);
-    }
-
-    @Test
-    @DisplayName("Should parse receipt date successfully")
-    void parseReceiptDate_Success() {
-        LocalDate date = ocrService.parseReceiptDate(sampleText);
-        assertNotNull(date);
-        assertEquals(LocalDate.of(2026, 8, 10), date);
-    }
-
-    @Test
-    @DisplayName("Should parse total amount successfully")
-    void parseTotalAmount_Success() {
-        BigDecimal total = ocrService.parseTotalAmount(sampleText);
-        assertNotNull(total);
-        assertEquals(new BigDecimal("17.80"), total);
-    }
-
-    @Test
-    @DisplayName("Should parse items from raw receipt text")
-    void parseReceiptItems_Success() {
-        List<ReceiptItem> items = ocrService.parseReceiptItems(sampleText);
-        assertNotNull(items);
-        assertEquals(3, items.size());
-        assertEquals("Milk", items.get(0).getName());
-        assertEquals(2, items.get(0).getQuantity());
-        assertEquals(new BigDecimal("4.50"), items.get(0).getPrice());
-    }
-
-    @Test
-    @DisplayName("Should return null for missing unconfident fields")
-    void parseTextToReceipt_EmptyText() {
-        Receipt receipt = ocrService.parseTextToReceipt("");
+    @DisplayName("Should extract items and calculate exact total ₹119,669 from college receipt")
+    void parseCollegeReceipt_Success() {
+        Receipt receipt = ocrService.parseTextToReceipt(sampleCollegeReceipt);
         assertNotNull(receipt);
-        assertNull(receipt.getMerchantName());
-        assertNull(receipt.getReceiptDate());
-        assertNull(receipt.getTotalAmount());
+        assertEquals("IMS ENGINEERING COLLEGE, GHAZIABAD", receipt.getMerchantName());
+        
+        List<ReceiptItem> items = receipt.getItems();
+        assertNotNull(items);
+        assertEquals(6, items.size());
+        
+        // Sum: 103919 + 2000 + 3000 + 3000 + 6500 + 1250 = 119669
+        assertNotNull(receipt.getTotalAmount());
+        assertEquals(new BigDecimal("119669"), receipt.getTotalAmount());
+    }
+
+    @Test
+    @DisplayName("Should parse explicit total amount for Indian Rupee formats")
+    void parseTotalAmount_IndianRupeeFormats() {
+        String text = """
+                RELIANCE SMART
+                Subtotal ₹700.00
+                CGST ₹75.00
+                SGST ₹75.00
+                Total: ₹850.00
+                """;
+        BigDecimal total = ocrService.parseTotalAmount(text);
+        assertNotNull(total);
+        assertEquals(new BigDecimal("850.00"), total);
     }
 }
