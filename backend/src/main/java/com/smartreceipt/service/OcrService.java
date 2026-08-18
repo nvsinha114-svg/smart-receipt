@@ -37,6 +37,9 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.smartreceipt.dto.ReceiptAIResponse;
+import com.smartreceipt.dto.ReceiptAIItem;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -44,6 +47,7 @@ public class OcrService {
 
     private final ReceiptRepository receiptRepository;
     private final ReceiptService receiptService;
+    private final AIReceiptParserService aiReceiptParserService;
 
     @Value("${tesseract.datapath:./tessdata}")
     private String tesseractDataPath;
@@ -158,6 +162,65 @@ public class OcrService {
                     .build();
         }
 
+        // Try AI parsing first if enabled
+        if (aiReceiptParserService != null && aiReceiptParserService.isAiEnabled()) {
+            try {
+                ReceiptAIResponse aiResponse = aiReceiptParserService.parseReceiptText(text);
+                if (aiResponse != null) {
+                    log.info("Successfully parsed receipt using AI parser. Mapping fields...");
+                    String merchantName = aiResponse.getMerchantName() != null ? aiResponse.getMerchantName().trim() : null;
+                    
+                    LocalDate receiptDate = null;
+                    if (aiResponse.getReceiptDate() != null) {
+                        receiptDate = tryParseDate(aiResponse.getReceiptDate());
+                    }
+                    if (receiptDate == null) {
+                        receiptDate = parseReceiptDate(text); // Fallback to regex date parsing
+                    }
+
+                    List<ReceiptItem> items = new ArrayList<>();
+                    if (aiResponse.getItems() != null) {
+                        for (ReceiptAIItem aiItem : aiResponse.getItems()) {
+                            if (aiItem.getName() != null && !aiItem.getName().trim().isEmpty()) {
+                                int qty = aiItem.getQuantity() != null ? aiItem.getQuantity() : 1;
+                                BigDecimal price = aiItem.getUnitPrice() != null ? aiItem.getUnitPrice() : BigDecimal.ZERO;
+                                items.add(ReceiptItem.builder()
+                                        .name(aiItem.getName().trim())
+                                        .quantity(qty)
+                                        .price(price)
+                                        .category(aiItem.getCategory() != null ? aiItem.getCategory().trim() : null)
+                                        .build());
+                            }
+                        }
+                    }
+
+                    // Deterministic total calculation: total = sum(quantity * price)
+                    BigDecimal finalTotal = BigDecimal.ZERO;
+                    if (!items.isEmpty()) {
+                        finalTotal = items.stream()
+                                .map(item -> {
+                                    BigDecimal qty = BigDecimal.valueOf(item.getQuantity() != null ? item.getQuantity() : 1);
+                                    BigDecimal price = item.getPrice() != null ? item.getPrice() : BigDecimal.ZERO;
+                                    return price.multiply(qty);
+                                })
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    }
+
+                    return Receipt.builder()
+                            .merchantName(merchantName)
+                            .receiptDate(receiptDate)
+                            .totalAmount(finalTotal)
+                            .category(aiResponse.getCategory() != null ? aiResponse.getCategory().trim() : null)
+                            .items(items)
+                            .build();
+                }
+            } catch (Exception e) {
+                log.error("Error during AI parsing integration. Falling back to local OCR parsing.", e);
+            }
+        }
+
+        // Fallback: Local OCR Tesseract parsing logic
+        log.info("Using local OCR Tesseract parsing fallback.");
         String merchantName = parseMerchantName(text);
         LocalDate receiptDate = parseReceiptDate(text);
         BigDecimal extractedTotal = parseTotalAmount(text);

@@ -1,5 +1,7 @@
 package com.smartreceipt.service;
 
+import com.smartreceipt.dto.ReceiptAIItem;
+import com.smartreceipt.dto.ReceiptAIResponse;
 import com.smartreceipt.entity.Receipt;
 import com.smartreceipt.entity.ReceiptItem;
 import com.smartreceipt.repository.ReceiptRepository;
@@ -18,6 +20,9 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class OcrServiceTest {
@@ -27,6 +32,9 @@ class OcrServiceTest {
 
     @Mock
     private ReceiptService receiptService;
+
+    @Mock
+    private AIReceiptParserService aiReceiptParserService;
 
     @InjectMocks
     private OcrService ocrService;
@@ -49,6 +57,8 @@ class OcrServiceTest {
                 
                 Sem: 5
                 """;
+        // Default lenient stub to bypass AI parser in existing OCR tests
+        lenient().when(aiReceiptParserService.isAiEnabled()).thenReturn(false);
     }
 
     @Test
@@ -80,5 +90,69 @@ class OcrServiceTest {
         BigDecimal total = ocrService.parseTotalAmount(text);
         assertNotNull(total);
         assertEquals(new BigDecimal("850.00"), total);
+    }
+
+    @Test
+    @DisplayName("Should parse receipt successfully using AI parser when enabled")
+    void parseTextToReceipt_AiEnabledSuccess() {
+        // Arrange
+        when(aiReceiptParserService.isAiEnabled()).thenReturn(true);
+        ReceiptAIResponse mockResponse = ReceiptAIResponse.builder()
+                .merchantName("IMS ENGINEERING COLLEGE")
+                .receiptDate("2026-08-10")
+                .currency("INR")
+                .category("Education")
+                .items(List.of(
+                        ReceiptAIItem.builder().name("Tuition Fee").quantity(1).unitPrice(new BigDecimal("103919")).category("Education").build(),
+                        ReceiptAIItem.builder().name("Insurance").quantity(1).unitPrice(new BigDecimal("1250")).category("Other").build()
+                ))
+                .build();
+        when(aiReceiptParserService.parseReceiptText(anyString())).thenReturn(mockResponse);
+
+        // Act
+        Receipt receipt = ocrService.parseTextToReceipt(sampleCollegeReceipt);
+
+        // Assert
+        assertNotNull(receipt);
+        assertEquals("IMS ENGINEERING COLLEGE", receipt.getMerchantName());
+        assertEquals(LocalDate.of(2026, 8, 10), receipt.getReceiptDate());
+        assertEquals("Education", receipt.getCategory());
+        assertEquals(2, receipt.getItems().size());
+        assertEquals(new BigDecimal("105169"), receipt.getTotalAmount()); // 103919 + 1250 = 105169
+        assertEquals("Education", receipt.getItems().get(0).getCategory());
+    }
+
+    @Test
+    @DisplayName("Should fall back to Tesseract parsing if AI parsing returns null")
+    void parseTextToReceipt_AiReturnsNullFallback() {
+        // Arrange
+        when(aiReceiptParserService.isAiEnabled()).thenReturn(true);
+        when(aiReceiptParserService.parseReceiptText(anyString())).thenReturn(null);
+
+        // Act
+        Receipt receipt = ocrService.parseTextToReceipt(sampleCollegeReceipt);
+
+        // Assert
+        assertNotNull(receipt);
+        assertEquals("IMS ENGINEERING COLLEGE, GHAZIABAD", receipt.getMerchantName());
+        assertEquals(6, receipt.getItems().size());
+        assertEquals(new BigDecimal("119669"), receipt.getTotalAmount());
+    }
+
+    @Test
+    @DisplayName("Should fall back to Tesseract parsing if AI parsing throws exception")
+    void parseTextToReceipt_AiThrowsExceptionFallback() {
+        // Arrange
+        when(aiReceiptParserService.isAiEnabled()).thenReturn(true);
+        when(aiReceiptParserService.parseReceiptText(anyString())).thenThrow(new RuntimeException("API error"));
+
+        // Act
+        Receipt receipt = ocrService.parseTextToReceipt(sampleCollegeReceipt);
+
+        // Assert
+        assertNotNull(receipt);
+        assertEquals("IMS ENGINEERING COLLEGE, GHAZIABAD", receipt.getMerchantName());
+        assertEquals(6, receipt.getItems().size());
+        assertEquals(new BigDecimal("119669"), receipt.getTotalAmount());
     }
 }

@@ -20,6 +20,7 @@ public class ReceiptResponse {
     private String merchantName;
     private LocalDate receiptDate;
     private BigDecimal totalAmount;
+    private String category;
     private List<ReceiptItemDto> items;
     private String userId;
     private LocalDateTime createdAt;

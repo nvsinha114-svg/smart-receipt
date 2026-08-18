@@ -31,6 +31,8 @@ public class Receipt {
 
     private BigDecimal totalAmount;
 
+    private String category;
+
     @Builder.Default
     private List<ReceiptItem> items = new ArrayList<>();
 

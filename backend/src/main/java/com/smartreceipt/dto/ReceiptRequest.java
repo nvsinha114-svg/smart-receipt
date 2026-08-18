@@ -29,6 +29,8 @@ public class ReceiptRequest {
     @PositiveOrZero(message = "Total amount cannot be negative")
     private BigDecimal totalAmount;
 
+    private String category;
+
     @Valid
     private List<ReceiptItemDto> items;
 }

@@ -1,12 +1,33 @@
+# IntelliJ
 .idea/
 *.iml
 
-backend/target/
-backend/.env
+# VS Code
+.vscode/
 
-frontend/node_modules/
-frontend/dist/
-frontend/.env
+# Java / Maven
+target/
+*.class
 
+# Node.js
+node_modules/
+**/node_modules/
+
+# Environment / Secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# OS files
 .DS_Store
 Thumbs.db
+
+# Frontend build
+dist/
+build/
+
+# Local files
+*.local

@@ -24,7 +24,53 @@ Production-grade Spring Boot 3 & Java 17 backend service for the **Smart Receipt
 ---
 
 ## Project Overview
-**Smart Receipt Backend** automates receipt tracking and expense management. Users can upload receipt files (JPG, JPEG, PNG, PDF) or manually input receipts. The backend automatically extracts merchant details, transaction date, line items, and total amounts using **Tesseract OCR** and **Apache PDFBox**, persists data in **MongoDB**, and generates downloadable PDF summaries using **OpenPDF**.
+**Smart Receipt Backend** automates receipt tracking and expense management. Users can upload receipt files (JPG, JPEG, PNG, PDF) or manually input receipts. The backend extracts merchant details, transaction date, category, line items, and total amounts using a combined **OCR + AI Parser pipeline** (with robust rule-based Tesseract local fallback), persists data in **MongoDB**, and generates downloadable PDF summaries.
+
+---
+
+## Spring AI Integration & Architecture Flow
+
+### Why OCR + AI are both used
+- **Tesseract OCR**: Responsible for scanning the uploaded receipt image/PDF and extracting the raw, unstructured, noisy text.
+- **Spring AI / LLM**: Responsible for processing the raw, unstructured OCR text, parsing out merchant name, receipt date, currency, item name, quantity, unit price, and assigning optional categorizations (e.g., Food, Transportation, Shopping, Education, Healthcare, Utilities, Other).
+
+### Data Flow
+```
+Receipt Image/PDF File
+       │
+       ▼
+Tesseract OCR / PDFBox
+       │
+       ▼
+Raw OCR Text
+       │
+       ▼
+Spring AI (OpenAI chatClient.entity())
+       │
+       ▼
+Structured DTO (ReceiptAIResponse)
+       │
+       ▼
+Java Validation & Processing
+       │
+       ▼
+Deterministic Calculations (subtotal = qty × price, total = sum of subtotals)
+       │
+       ▼
+MongoDB Persisted Entity
+       │
+       ▼
+React Frontend / PDF Generation
+```
+
+### CRITICAL: Deterministic Financial Calculations
+To ensure absolute accuracy, **the LLM is never trusted with calculating receipt totals**. The AI is solely responsible for extracting and normalizing raw quantity and unit price tokens. The Spring Boot backend uses `BigDecimal` to compute all item subtotals and the final total dynamically in Java.
+
+### AI Fallback Heuristic
+If the AI service is disabled (no API key configured), times out, fails, or returns invalid JSON:
+1. The exception is logged properly.
+2. The application **does not crash**.
+3. It seamlessly falls back to the deterministic, rule-based local OCR parser (`OcrService` regex parser) to extract receipt metadata and items.
 
 ---
 
@@ -178,6 +224,8 @@ Create a `.env` file or export the following variables:
 | `JWT_SECRET` | `9a8b7c6d5e4f3a2b1c0d9e8f...` | 256-bit Secret Key for signing JWTs |
 | `JWT_EXPIRATION_MS` | `86400000` | JWT Validity duration in milliseconds (24 hours) |
 | `TESSERACT_DATAPATH` | `./tessdata` | Path to directory containing `eng.traineddata` |
+| `OPENAI_API_KEY` | *(optional)* | OpenAI API Key for AI receipt parsing layer (Leave blank to use Tesseract local fallback) |
+| `OPENAI_MODEL` | `gpt-4o-mini` | Spring AI OpenAI Chat Model to utilize |
 
 ---
 

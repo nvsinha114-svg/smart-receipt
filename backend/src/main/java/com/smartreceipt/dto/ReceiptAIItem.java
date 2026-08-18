@@ -1,4 +1,4 @@
-package com.smartreceipt.entity;
+package com.smartreceipt.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -11,10 +11,9 @@ import java.math.BigDecimal;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ReceiptItem {
-
+public class ReceiptAIItem {
     private String name;
     private Integer quantity;
-    private BigDecimal price;
+    private BigDecimal unitPrice;
     private String category;
 }

@@ -27,4 +27,6 @@ public class ReceiptItemDto {
     @NotNull(message = "Item price is required")
     @PositiveOrZero(message = "Item price cannot be negative")
     private BigDecimal price;
+
+    private String category;
 }

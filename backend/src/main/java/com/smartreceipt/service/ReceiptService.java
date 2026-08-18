@@ -34,6 +34,7 @@ public class ReceiptService {
                 .merchantName(request.getMerchantName())
                 .receiptDate(request.getReceiptDate())
                 .totalAmount(effectiveTotal)
+                .category(request.getCategory())
                 .items(items)
                 .userId(currentUser.getId())
                 .createdAt(LocalDateTime.now())
@@ -64,6 +65,7 @@ public class ReceiptService {
         List<ReceiptItem> items = mapItemsToEntity(request.getItems());
         receipt.setMerchantName(request.getMerchantName());
         receipt.setReceiptDate(request.getReceiptDate());
+        receipt.setCategory(request.getCategory());
         receipt.setItems(items);
         
         Receipt temp = Receipt.builder().items(items).totalAmount(request.getTotalAmount()).build();
@@ -107,6 +109,7 @@ public class ReceiptService {
                                 .name(item.getName())
                                 .quantity(item.getQuantity())
                                 .price(item.getPrice())
+                                .category(item.getCategory())
                                 .build())
                         .collect(Collectors.toList()) : new ArrayList<>();
 
@@ -117,6 +120,7 @@ public class ReceiptService {
                 .merchantName(receipt.getMerchantName())
                 .receiptDate(receipt.getReceiptDate())
                 .totalAmount(effectiveTotal)
+                .category(receipt.getCategory())
                 .items(itemDtos)
                 .userId(receipt.getUserId())
                 .createdAt(receipt.getCreatedAt())
@@ -151,6 +155,7 @@ public class ReceiptService {
                         .name(dto.getName())
                         .quantity(dto.getQuantity())
                         .price(dto.getPrice())
+                        .category(dto.getCategory())
                         .build())
                 .collect(Collectors.toList());
     }

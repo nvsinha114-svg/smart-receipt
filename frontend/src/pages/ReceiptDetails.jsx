@@ -17,21 +17,21 @@ export default function ReceiptDetails(){
 
   const fmt = (val) => val == null ? "Not detected" : `₹${Number(val).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  return <div className="page"><header className="topbar"><div><Link className="back-link" to="/receipts"><ArrowLeft size={16}/> Back</Link><h1>{r.merchantName||"Receipt"}</h1><p className="muted">{r.receiptDate||"No date"} · ID {r.id}</p></div><div className="actions"><button className="secondary-btn" onClick={pdf}><Download size={17}/> PDF</button><Link className="secondary-btn" to={`/receipts/${id}/edit`}><Pencil size={17}/> Edit</Link><button className="danger-btn" onClick={remove}><Trash2 size={17}/> Delete</button></div></header>
+  return <div className="page"><header className="topbar"><div><Link className="back-link" to="/receipts"><ArrowLeft size={16}/> Back</Link><h1>{r.merchantName||"Receipt"}{r.category && <span className="category-badge" style={{marginLeft: "12px"}}>{r.category}</span>}</h1><p className="muted">{r.receiptDate||"No date"} · ID {r.id}</p></div><div className="actions"><button className="secondary-btn" onClick={pdf}><Download size={17}/> PDF</button><Link className="secondary-btn" to={`/receipts/${id}/edit`}><Pencil size={17}/> Edit</Link><button className="danger-btn" onClick={remove}><Trash2 size={17}/> Delete</button></div></header>
     <div className="card receipt-detail">
       <div className="receipt-total"><span>Total amount</span><strong>{fmt(effectiveTotal)}</strong></div>
       <h3>Items</h3>
       <div className="table-wrap">
         <table>
           <thead>
-            <tr><th>Item</th><th>Qty</th><th>Unit Price</th><th>Subtotal</th></tr>
+            <tr><th>Item</th><th>Category</th><th>Qty</th><th>Unit Price</th><th>Subtotal</th></tr>
           </thead>
           <tbody>
             {items.map((x,i)=>{
               const qty = Number(x.quantity || 1);
               const price = Number(x.price || 0);
               const subtotal = qty * price;
-              return <tr key={i}><td>{x.name}</td><td>{qty}</td><td>{fmt(price)}</td><td>{fmt(subtotal)}</td></tr>;
+              return <tr key={i}><td>{x.name}</td><td>{x.category ? <span className="category-badge">{x.category}</span> : <span className="muted">—</span>}</td><td>{qty}</td><td>{fmt(price)}</td><td>{fmt(subtotal)}</td></tr>;
             })}
           </tbody>
         </table>
