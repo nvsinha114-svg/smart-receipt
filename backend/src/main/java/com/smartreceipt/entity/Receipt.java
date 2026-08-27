@@ -31,6 +31,14 @@ public class Receipt {
 
     private BigDecimal totalAmount;
 
+    private BigDecimal subtotal;
+    private BigDecimal totalTax;
+    private BigDecimal discount;
+    private BigDecimal shippingAmount;
+
+    @Builder.Default
+    private List<TaxDetail> taxes = new ArrayList<>();
+
     private String category;
 
     @Builder.Default

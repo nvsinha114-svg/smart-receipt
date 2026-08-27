@@ -3,10 +3,12 @@ package com.smartreceipt.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartreceipt.dto.AuthRequest;
 import com.smartreceipt.dto.AuthResponse;
+import com.smartreceipt.dto.MessageResponse;
 import com.smartreceipt.dto.RegisterRequest;
+import com.smartreceipt.dto.ResendOtpRequest;
+import com.smartreceipt.dto.VerifyOtpRequest;
 import com.smartreceipt.entity.Role;
 import com.smartreceipt.exception.DuplicateResourceException;
-import com.smartreceipt.exception.GlobalExceptionHandler;
 import com.smartreceipt.security.JwtAuthenticationFilter;
 import com.smartreceipt.security.JwtService;
 import com.smartreceipt.service.AuthService;
@@ -49,6 +51,7 @@ class AuthControllerTest {
     private RegisterRequest registerRequest;
     private AuthRequest authRequest;
     private AuthResponse authResponse;
+    private MessageResponse messageResponse;
 
     @BeforeEach
     void setUp() {
@@ -72,34 +75,73 @@ class AuthControllerTest {
                 .email("alex@example.com")
                 .role(Role.USER)
                 .build();
+
+        messageResponse = MessageResponse.builder()
+                .message("Verification code sent successfully to alex@example.com")
+                .email("alex@example.com")
+                .build();
     }
 
     @Test
-    @DisplayName("POST /api/auth/register - Success (201 Created)")
+    @DisplayName("POST /api/auth/register - Success (200 OK - OTP Sent)")
     void register_Success() throws Exception {
-        when(authService.register(any(RegisterRequest.class))).thenReturn(authResponse);
+        when(authService.register(any(RegisterRequest.class))).thenReturn(messageResponse);
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registerRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Verification code sent successfully to alex@example.com"))
+                .andExpect(jsonPath("$.email").value("alex@example.com"));
+    }
+
+    @Test
+    @DisplayName("POST /api/auth/register - Reject Invalid Email Format (400 Bad Request)")
+    void register_InvalidEmail_Returns400() throws Exception {
+        RegisterRequest invalidReq = RegisterRequest.builder()
+                .name("Alex Smith")
+                .email("abc@gmail") // invalid Gmail format
+                .password("password123")
+                .build();
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(invalidReq)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("POST /api/auth/verify-otp - Success (201 Created)")
+    void verifyOtp_Success() throws Exception {
+        VerifyOtpRequest verifyReq = VerifyOtpRequest.builder()
+                .email("alex@example.com")
+                .otp("123456")
+                .build();
+
+        when(authService.verifyOtp(any(VerifyOtpRequest.class))).thenReturn(authResponse);
+
+        mockMvc.perform(post("/api/auth/verify-otp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(verifyReq)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.token").value("valid_jwt_token"))
-                .andExpect(jsonPath("$.email").value("alex@example.com"))
-                .andExpect(jsonPath("$.role").value("USER"));
+                .andExpect(jsonPath("$.email").value("alex@example.com"));
     }
 
     @Test
-    @DisplayName("POST /api/auth/register - Conflict when email already exists (409 Conflict)")
-    void register_DuplicateEmail_Returns409() throws Exception {
-        when(authService.register(any(RegisterRequest.class)))
-                .thenThrow(new DuplicateResourceException("User already exists with email: alex@example.com"));
+    @DisplayName("POST /api/auth/resend-otp - Success (200 OK)")
+    void resendOtp_Success() throws Exception {
+        ResendOtpRequest resendReq = ResendOtpRequest.builder()
+                .email("alex@example.com")
+                .build();
 
-        mockMvc.perform(post("/api/auth/register")
+        when(authService.resendOtp(any(ResendOtpRequest.class))).thenReturn(messageResponse);
+
+        mockMvc.perform(post("/api/auth/resend-otp")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(registerRequest)))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.status").value(409))
-                .andExpect(jsonPath("$.message").value("User already exists with email: alex@example.com"));
+                        .content(objectMapper.writeValueAsString(resendReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("alex@example.com"));
     }
 
     @Test

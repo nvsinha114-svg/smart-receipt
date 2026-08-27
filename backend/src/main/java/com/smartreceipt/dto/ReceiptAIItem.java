@@ -13,7 +13,12 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class ReceiptAIItem {
     private String name;
+    private String description;
     private Integer quantity;
     private BigDecimal unitPrice;
+    private BigDecimal discount;
+    private BigDecimal taxRate;
+    private BigDecimal taxAmount;
+    private BigDecimal itemTotal;
     private String category;
 }

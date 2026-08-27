@@ -3,9 +3,11 @@ package com.smartreceipt.service;
 import com.smartreceipt.dto.ReceiptItemDto;
 import com.smartreceipt.dto.ReceiptRequest;
 import com.smartreceipt.dto.ReceiptResponse;
+import com.smartreceipt.dto.TaxDetailDto;
 import com.smartreceipt.entity.Receipt;
 import com.smartreceipt.entity.ReceiptItem;
 import com.smartreceipt.entity.Role;
+import com.smartreceipt.entity.TaxDetail;
 import com.smartreceipt.exception.ResourceNotFoundException;
 import com.smartreceipt.exception.UnauthorizedAccessException;
 import com.smartreceipt.repository.ReceiptRepository;
@@ -27,6 +29,7 @@ public class ReceiptService {
 
     public ReceiptResponse createReceipt(ReceiptRequest request, UserPrincipal currentUser) {
         List<ReceiptItem> items = mapItemsToEntity(request.getItems());
+        List<TaxDetail> taxes = mapTaxesToEntity(request.getTaxes());
         Receipt temp = Receipt.builder().items(items).totalAmount(request.getTotalAmount()).build();
         BigDecimal effectiveTotal = calculateEffectiveTotal(temp);
 
@@ -34,6 +37,11 @@ public class ReceiptService {
                 .merchantName(request.getMerchantName())
                 .receiptDate(request.getReceiptDate())
                 .totalAmount(effectiveTotal)
+                .subtotal(request.getSubtotal())
+                .totalTax(request.getTotalTax())
+                .discount(request.getDiscount())
+                .shippingAmount(request.getShippingAmount())
+                .taxes(taxes)
                 .category(request.getCategory())
                 .items(items)
                 .userId(currentUser.getId())
@@ -63,9 +71,15 @@ public class ReceiptService {
         Receipt receipt = findReceiptEntityById(id, currentUser);
 
         List<ReceiptItem> items = mapItemsToEntity(request.getItems());
+        List<TaxDetail> taxes = mapTaxesToEntity(request.getTaxes());
         receipt.setMerchantName(request.getMerchantName());
         receipt.setReceiptDate(request.getReceiptDate());
         receipt.setCategory(request.getCategory());
+        receipt.setSubtotal(request.getSubtotal());
+        receipt.setTotalTax(request.getTotalTax());
+        receipt.setDiscount(request.getDiscount());
+        receipt.setShippingAmount(request.getShippingAmount());
+        receipt.setTaxes(taxes);
         receipt.setItems(items);
         
         Receipt temp = Receipt.builder().items(items).totalAmount(request.getTotalAmount()).build();
@@ -88,7 +102,7 @@ public class ReceiptService {
         boolean isOwner = receipt.getUserId() != null && receipt.getUserId().equals(currentUser.getId());
 
         if (!isAdmin && !isOwner) {
-            throw new UnauthorizedAccessException("You are not authorized to access or modify this receipt");
+            throw new UnauthorizedAccessException("You do not have permission to access this receipt");
         }
 
         return receipt;
@@ -113,6 +127,16 @@ public class ReceiptService {
                                 .build())
                         .collect(Collectors.toList()) : new ArrayList<>();
 
+        List<TaxDetailDto> taxDtos = receipt.getTaxes() != null ?
+                receipt.getTaxes().stream()
+                        .map(tax -> TaxDetailDto.builder()
+                                .type(tax.getType())
+                                .rate(tax.getRate())
+                                .amount(tax.getAmount())
+                                .currency(tax.getCurrency())
+                                .build())
+                        .collect(Collectors.toList()) : new ArrayList<>();
+
         BigDecimal effectiveTotal = calculateEffectiveTotal(receipt);
 
         return ReceiptResponse.builder()
@@ -120,6 +144,11 @@ public class ReceiptService {
                 .merchantName(receipt.getMerchantName())
                 .receiptDate(receipt.getReceiptDate())
                 .totalAmount(effectiveTotal)
+                .subtotal(receipt.getSubtotal())
+                .totalTax(receipt.getTotalTax())
+                .discount(receipt.getDiscount())
+                .shippingAmount(receipt.getShippingAmount())
+                .taxes(taxDtos)
                 .category(receipt.getCategory())
                 .items(itemDtos)
                 .userId(receipt.getUserId())
@@ -128,6 +157,10 @@ public class ReceiptService {
     }
 
     public BigDecimal calculateEffectiveTotal(Receipt receipt) {
+        if (receipt.getTotalAmount() != null && receipt.getTotalAmount().compareTo(BigDecimal.ZERO) > 0) {
+            return receipt.getTotalAmount();
+        }
+
         if (receipt.getItems() != null && !receipt.getItems().isEmpty()) {
             BigDecimal itemsSum = receipt.getItems().stream()
                     .map(item -> {
@@ -138,9 +171,7 @@ public class ReceiptService {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
             if (itemsSum.compareTo(BigDecimal.ZERO) > 0) {
-                if (receipt.getTotalAmount() == null || itemsSum.compareTo(receipt.getTotalAmount()) > 0 || receipt.getTotalAmount().compareTo(BigDecimal.ZERO) == 0) {
-                    return itemsSum;
-                }
+                return itemsSum;
             }
         }
         return receipt.getTotalAmount();
@@ -156,6 +187,20 @@ public class ReceiptService {
                         .quantity(dto.getQuantity())
                         .price(dto.getPrice())
                         .category(dto.getCategory())
+                        .build())
+                .collect(Collectors.toList());
+    }
+
+    private List<TaxDetail> mapTaxesToEntity(List<TaxDetailDto> dtos) {
+        if (dtos == null) {
+            return new ArrayList<>();
+        }
+        return dtos.stream()
+                .map(dto -> TaxDetail.builder()
+                        .type(dto.getType())
+                        .rate(dto.getRate())
+                        .amount(dto.getAmount())
+                        .currency(dto.getCurrency())
                         .build())
                 .collect(Collectors.toList());
     }

@@ -8,34 +8,33 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import java.time.LocalDateTime;
+
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Document(collection = "users")
-public class User {
+@Document(collection = "otp_verifications")
+public class OtpVerification {
 
     @Id
     private String id;
 
-    private String name;
-
     @Indexed(unique = true)
     private String email;
 
-    private String password;
+    private String otpHash; // BCrypt hashed OTP
+
+    private String tempName;
+    private String tempPassword; // Hashed password
+    private Role tempRole;
+
+    private LocalDateTime expiresAt;
+    private LocalDateTime lastSentAt;
 
     @Builder.Default
-    private Role role = Role.USER;
+    private int attempts = 0;
 
-    @Builder.Default
-    private boolean emailVerified = false;
-
-    public boolean isEmailVerified() {
-        return emailVerified;
-    }
-
-    public void setEmailVerified(boolean emailVerified) {
-        this.emailVerified = emailVerified;
-    }
+    @Indexed(name = "expire_at_index", expireAfterSeconds = 0)
+    private LocalDateTime createdAt;
 }

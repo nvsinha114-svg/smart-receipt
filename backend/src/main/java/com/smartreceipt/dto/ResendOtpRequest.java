@@ -11,12 +11,9 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class AuthRequest {
+public class ResendOtpRequest {
 
     @NotBlank(message = "Email is required")
     @ValidEmail(message = "Invalid email format")
     private String email;
-
-    @NotBlank(message = "Password is required")
-    private String password;
 }

@@ -16,12 +16,27 @@ spring:
       max-file-size: 10MB
       max-request-size: 10MB
       enabled: true
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
   ai:
-    openai:
-      api-key: ${OPENAI_API_KEY:dummy-key-to-bypass-startup-check}
-      chat:
-        options:
-          model: ${OPENAI_MODEL:gpt-4o-mini}
+    vertex:
+      ai:
+        gemini:
+          api-key: ${GEMINI_API_KEY:dummy-key-to-bypass-startup-check}
+          location: ${GEMINI_LOCATION:us-central1}
+          project-id: ${GEMINI_PROJECT_ID:smart-receipt}
+          chat:
+            options:
+              model: ${GEMINI_MODEL:gemini-1.5-flash}
 
 jwt:
   secret: ${JWT_SECRET}

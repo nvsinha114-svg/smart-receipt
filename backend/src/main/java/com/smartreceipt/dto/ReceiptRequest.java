@@ -29,6 +29,14 @@ public class ReceiptRequest {
     @PositiveOrZero(message = "Total amount cannot be negative")
     private BigDecimal totalAmount;
 
+    private BigDecimal subtotal;
+    private BigDecimal totalTax;
+    private BigDecimal discount;
+    private BigDecimal shippingAmount;
+
+    @Valid
+    private List<TaxDetailDto> taxes;
+
     private String category;
 
     @Valid

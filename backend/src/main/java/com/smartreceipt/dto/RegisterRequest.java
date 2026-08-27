@@ -1,7 +1,7 @@
 package com.smartreceipt.dto;
 
 import com.smartreceipt.entity.Role;
-import jakarta.validation.constraints.Email;
+import com.smartreceipt.util.ValidEmail;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -20,7 +20,7 @@ public class RegisterRequest {
     private String name;
 
     @NotBlank(message = "Email is required")
-    @Email(message = "Invalid email format")
+    @ValidEmail(message = "Invalid email format")
     private String email;
 
     @NotBlank(message = "Password is required")
