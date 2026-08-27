@@ -25,16 +25,29 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener("auth-expired", handler);
   }, []);
 
+  /**
+   * Step 1 of login — calls the backend to validate credentials and send login OTP.
+   * Returns { requiresOtp: true, email } — does NOT store JWT.
+   */
   const login = async (email, password) => {
     const { data } = await loginRequest({ email, password });
+    // Backend now returns { requiresOtp: true, email, message } — NOT a JWT
+    return data;
+  };
+
+  /**
+   * Step 2 of login — called after OTP is verified.
+   * Stores the JWT and user info, granting access to protected routes.
+   */
+  const loginWithToken = (data) => {
     const jwt = data?.token || data?.accessToken || data?.jwt;
-    if (!jwt) throw new Error("Login succeeded but no JWT token was returned by the backend.");
+    if (!jwt) throw new Error("No JWT token returned by the backend.");
 
     const claims = decodeJwt(jwt);
     const currentUser = data?.user || {
-      name: claims?.name || claims?.username || email.split("@")[0],
-      email: claims?.email || email,
-      role: claims?.role || claims?.roles?.[0] || "USER"
+      name: claims?.name || claims?.username || data?.email?.split("@")[0],
+      email: claims?.email || data?.email,
+      role: claims?.role || claims?.roles?.[0] || "USER",
     };
 
     localStorage.setItem("smart_receipt_token", jwt);
@@ -50,7 +63,10 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
-  const value = useMemo(() => ({ token, user, login, logout, isAuthenticated: !!token }), [token, user]);
+  const value = useMemo(
+    () => ({ token, user, login, loginWithToken, logout, isAuthenticated: !!token }),
+    [token, user]
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

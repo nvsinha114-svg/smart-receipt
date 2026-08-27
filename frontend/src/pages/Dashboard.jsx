@@ -9,9 +9,10 @@ export default function Dashboard(){
   useEffect(()=>{getReceipts().then(r=>setReceipts(Array.isArray(r.data)?r.data:r.data?.content||[])).catch(()=>{}).finally(()=>setLoading(false))},[]);
 
   const getEffTotal = (r) => {
+    if (r.totalAmount != null && Number(r.totalAmount) > 0) return Number(r.totalAmount);
     const items = r.items || [];
     const itemsSum = items.reduce((sum, item) => sum + (Number(item.quantity || 1) * Number(item.price || 0)), 0);
-    return (items.length > 0 && itemsSum > 0) ? itemsSum : r.totalAmount;
+    return itemsSum > 0 ? itemsSum : 0;
   };
 
   const total = receipts.reduce((s,r)=>{

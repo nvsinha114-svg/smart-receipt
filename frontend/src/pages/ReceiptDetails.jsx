@@ -13,9 +13,11 @@ export default function ReceiptDetails(){
 
   const items = r.items || [];
   const itemsSum = items.reduce((sum, item) => sum + (Number(item.quantity || 1) * Number(item.price || 0)), 0);
-  const effectiveTotal = (items.length > 0 && itemsSum > 0) ? itemsSum : (r.totalAmount != null ? Number(r.totalAmount) : null);
+  const effectiveTotal = (r.totalAmount != null && Number(r.totalAmount) > 0) ? Number(r.totalAmount) : (itemsSum > 0 ? itemsSum : null);
 
   const fmt = (val) => val == null ? "Not detected" : `₹${Number(val).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const taxes = r.taxes || [];
 
   return <div className="page"><header className="topbar"><div><Link className="back-link" to="/receipts"><ArrowLeft size={16}/> Back</Link><h1>{r.merchantName||"Receipt"}{r.category && <span className="category-badge" style={{marginLeft: "12px"}}>{r.category}</span>}</h1><p className="muted">{r.receiptDate||"No date"} · ID {r.id}</p></div><div className="actions"><button className="secondary-btn" onClick={pdf}><Download size={17}/> PDF</button><Link className="secondary-btn" to={`/receipts/${id}/edit`}><Pencil size={17}/> Edit</Link><button className="danger-btn" onClick={remove}><Trash2 size={17}/> Delete</button></div></header>
     <div className="card receipt-detail">
@@ -36,6 +38,24 @@ export default function ReceiptDetails(){
           </tbody>
         </table>
       </div>
+
+      {(r.subtotal != null || r.discount != null || r.shippingAmount != null || taxes.length > 0 || r.totalTax != null) && (
+        <div style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #e2e8f0" }}>
+          <h3>Tax & Summary Breakdown</h3>
+          <table style={{ width: "100%", maxWidth: "400px", marginLeft: "auto", fontSize: "0.95rem" }}>
+            <tbody>
+              {r.subtotal != null && <tr><td style={{ padding: "4px 0", color: "#64748b" }}>Subtotal / Taxable Amount</td><td style={{ textAlign: "right", fontWeight: "600" }}>{fmt(r.subtotal)}</td></tr>}
+              {taxes.map((t, i) => (
+                <tr key={i}><td style={{ padding: "4px 0", color: "#64748b" }}>{t.type} {t.rate != null ? `(${t.rate}%)` : ""}</td><td style={{ textAlign: "right", fontWeight: "600" }}>{fmt(t.amount)}</td></tr>
+              ))}
+              {r.totalTax != null && taxes.length === 0 && <tr><td style={{ padding: "4px 0", color: "#64748b" }}>Total Tax</td><td style={{ textAlign: "right", fontWeight: "600" }}>{fmt(r.totalTax)}</td></tr>}
+              {r.discount != null && Number(r.discount) > 0 && <tr><td style={{ padding: "4px 0", color: "#64748b" }}>Discount</td><td style={{ textAlign: "right", color: "#e11d48", fontWeight: "600" }}>-{fmt(r.discount)}</td></tr>}
+              {r.shippingAmount != null && Number(r.shippingAmount) > 0 && <tr><td style={{ padding: "4px 0", color: "#64748b" }}>Shipping / Delivery</td><td style={{ textAlign: "right", fontWeight: "600" }}>{fmt(r.shippingAmount)}</td></tr>}
+              <tr style={{ borderTop: "1px solid #cbd5e1", fontWeight: "700" }}><td style={{ padding: "8px 0" }}>Grand Total</td><td style={{ textAlign: "right", padding: "8px 0", color: "#0f172a" }}>{fmt(effectiveTotal)}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   </div>
 }

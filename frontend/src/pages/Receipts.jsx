@@ -11,9 +11,10 @@ export default function Receipts(){
   const remove=async(id)=>{if(!confirm("Delete this receipt?"))return;await deleteReceipt(id);load()};
   
   const getEffTotal = (r) => {
+    if (r.totalAmount != null && Number(r.totalAmount) > 0) return r.totalAmount;
     const items = r.items || [];
     const itemsSum = items.reduce((sum, item) => sum + (Number(item.quantity || 1) * Number(item.price || 0)), 0);
-    return (items.length > 0 && itemsSum > 0) ? itemsSum : r.totalAmount;
+    return itemsSum > 0 ? itemsSum : null;
   };
 
   const fmt = (val) => val == null ? "Not detected" : `₹${Number(val).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
