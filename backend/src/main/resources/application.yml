@@ -7,29 +7,33 @@ server:
 spring:
   application:
     name: smart-receipt-backend
+
   data:
     mongodb:
       uri: ${SPRING_DATA_MONGODB_URI:mongodb://localhost:27017/smart_receipt}
       auto-index-creation: true
+
   servlet:
     multipart:
       max-file-size: 10MB
       max-request-size: 10MB
       enabled: true
-mail:
-  host: smtp.gmail.com
-  port: 587
-  username: ${MAIL_USERNAME}
-  password: ${MAIL_PASSWORD}
-  properties:
-    mail:
-      smtp:
-        auth: true
-        starttls:
-          enable: true
-        connectiontimeout: 10000
-        timeout: 10000
-        writetimeout: 10000
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 10000
+          timeout: 10000
+          writetimeout: 10000
+
   ai:
     vertex:
       ai:
@@ -43,7 +47,7 @@ mail:
 
 jwt:
   secret: ${JWT_SECRET}
-  expiration-ms: ${JWT_EXPIRATION_MS:86400000} # 24 hours
+  expiration-ms: ${JWT_EXPIRATION_MS:86400000}
 
 tesseract:
   datapath: ${TESSERACT_DATAPATH:./tessdata}
