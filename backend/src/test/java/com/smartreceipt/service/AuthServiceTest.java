@@ -2,6 +2,7 @@ package com.smartreceipt.service;
 
 import com.smartreceipt.dto.AuthRequest;
 import com.smartreceipt.dto.AuthResponse;
+import com.smartreceipt.dto.LoginOtpResponse;
 import com.smartreceipt.dto.MessageResponse;
 import com.smartreceipt.dto.RegisterRequest;
 import com.smartreceipt.dto.VerifyOtpRequest;
@@ -25,7 +26,9 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -94,7 +97,7 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("Should verify OTP and return JWT token response")
+    @DisplayName("Should verify registration OTP and return JWT token response")
     void verifyOtp_Success() {
         VerifyOtpRequest request = VerifyOtpRequest.builder()
                 .email("jane@example.com")
@@ -112,18 +115,41 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("Should authenticate verified user and return JWT token on login")
-    void login_Success() {
+    @DisplayName("Login Step 1 — Should validate credentials, send login OTP, return requiresOtp=true (no JWT)")
+    void login_Success_ReturnsLoginOtpResponse() {
         AuthRequest request = AuthRequest.builder()
                 .email("jane@example.com")
                 .password("password123")
                 .build();
 
+        MessageResponse otpSentMsg = MessageResponse.builder()
+                .message("Login verification code sent to jane@example.com.")
+                .email("jane@example.com")
+                .build();
+
         when(userRepository.findByEmail("jane@example.com")).thenReturn(Optional.of(mockVerifiedUser));
         when(passwordEncoder.matches("password123", "encoded_password")).thenReturn(true);
+        when(userService.initiateLoginOtp(anyString())).thenReturn(otpSentMsg);
+
+        LoginOtpResponse response = authService.login(request);
+
+        assertNotNull(response);
+        assertTrue(response.isRequiresOtp());
+        assertEquals("jane@example.com", response.getEmail());
+    }
+
+    @Test
+    @DisplayName("Login Step 2 — Should verify login OTP and return JWT token")
+    void verifyLoginOtp_Success() {
+        VerifyOtpRequest request = VerifyOtpRequest.builder()
+                .email("jane@example.com")
+                .otp("654321")
+                .build();
+
+        when(userService.verifyLoginOtp(request)).thenReturn(mockVerifiedUser);
         when(jwtService.generateToken(any())).thenReturn("mock_jwt_token");
 
-        AuthResponse response = authService.login(request);
+        AuthResponse response = authService.verifyLoginOtp(request);
 
         assertNotNull(response);
         assertEquals("mock_jwt_token", response.getToken());

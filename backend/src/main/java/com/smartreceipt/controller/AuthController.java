@@ -2,6 +2,7 @@ package com.smartreceipt.controller;
 
 import com.smartreceipt.dto.AuthRequest;
 import com.smartreceipt.dto.AuthResponse;
+import com.smartreceipt.dto.LoginOtpResponse;
 import com.smartreceipt.dto.MessageResponse;
 import com.smartreceipt.dto.RegisterRequest;
 import com.smartreceipt.dto.ResendOtpRequest;
@@ -38,7 +39,7 @@ public class AuthController {
     }
 
     @PostMapping("/verify-otp")
-    @Operation(summary = "Verify OTP code", description = "Verifies 6-digit OTP code and creates user account upon successful verification.")
+    @Operation(summary = "Verify registration OTP code", description = "Verifies 6-digit OTP code and creates user account upon successful verification.")
     @ApiResponse(responseCode = "201", description = "Account created and email verified successfully")
     @ApiResponse(responseCode = "400", description = "Invalid or expired OTP code")
     public ResponseEntity<AuthResponse> verifyOtp(@Valid @RequestBody VerifyOtpRequest request) {
@@ -47,7 +48,7 @@ public class AuthController {
     }
 
     @PostMapping("/resend-otp")
-    @Operation(summary = "Resend OTP code", description = "Resends a new 6-digit OTP code with 60-second cooldown rate limiting.")
+    @Operation(summary = "Resend registration OTP code", description = "Resends a new 6-digit OTP code for registration with 60-second cooldown rate limiting.")
     @ApiResponse(responseCode = "200", description = "New OTP successfully sent")
     @ApiResponse(responseCode = "400", description = "Rate limit cooldown active or invalid request")
     public ResponseEntity<MessageResponse> resendOtp(@Valid @RequestBody ResendOtpRequest request) {
@@ -56,12 +57,30 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    @Operation(summary = "User login", description = "Authenticates user credentials, enforces email verification check, and returns a JWT token.")
-    @ApiResponse(responseCode = "200", description = "Authentication successful")
+    @Operation(summary = "Step 1 — User login (password verification)", description = "Authenticates user credentials, enforces email verification check, sends a login OTP, and returns requiresOtp=true. No JWT is issued yet.")
+    @ApiResponse(responseCode = "200", description = "Credentials valid — login OTP sent")
     @ApiResponse(responseCode = "401", description = "Invalid email or password")
     @ApiResponse(responseCode = "403", description = "Email not verified")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody AuthRequest request) {
-        AuthResponse response = authService.login(request);
+    public ResponseEntity<LoginOtpResponse> login(@Valid @RequestBody AuthRequest request) {
+        LoginOtpResponse response = authService.login(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/verify-login-otp")
+    @Operation(summary = "Step 2 — Verify login OTP and issue JWT", description = "Verifies the login OTP and returns a fully authenticated JWT token to be used for all protected API calls.")
+    @ApiResponse(responseCode = "200", description = "Login OTP verified — JWT issued")
+    @ApiResponse(responseCode = "400", description = "Invalid or expired login OTP")
+    public ResponseEntity<AuthResponse> verifyLoginOtp(@Valid @RequestBody VerifyOtpRequest request) {
+        AuthResponse response = authService.verifyLoginOtp(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/resend-login-otp")
+    @Operation(summary = "Resend login OTP code", description = "Resends a new login OTP code with 60-second cooldown rate limiting.")
+    @ApiResponse(responseCode = "200", description = "New login OTP successfully sent")
+    @ApiResponse(responseCode = "400", description = "Rate limit cooldown active or no pending login OTP")
+    public ResponseEntity<MessageResponse> resendLoginOtp(@Valid @RequestBody ResendOtpRequest request) {
+        MessageResponse response = authService.resendLoginOtp(request);
         return ResponseEntity.ok(response);
     }
 }

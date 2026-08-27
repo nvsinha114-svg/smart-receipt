@@ -2,6 +2,7 @@ package com.smartreceipt.service;
 
 import com.smartreceipt.dto.AuthRequest;
 import com.smartreceipt.dto.AuthResponse;
+import com.smartreceipt.dto.LoginOtpResponse;
 import com.smartreceipt.dto.MessageResponse;
 import com.smartreceipt.dto.RegisterRequest;
 import com.smartreceipt.dto.ResendOtpRequest;
@@ -51,7 +52,11 @@ public class AuthService {
         return userService.resendOtp(request);
     }
 
-    public AuthResponse login(AuthRequest request) {
+    /**
+     * Step 1 of login: validate credentials, then send a login OTP.
+     * Returns a LoginOtpResponse (no JWT) to force OTP verification before access.
+     */
+    public LoginOtpResponse login(AuthRequest request) {
         String rawEmail = request.getEmail();
         if (!EmailValidator.isValid(rawEmail)) {
             throw new BadCredentialsException("Invalid email or password");
@@ -67,9 +72,26 @@ public class AuthService {
         }
 
         if (!user.isEmailVerified()) {
-            throw new UnauthorizedAccessException("Email address is not verified. Please verify your email with OTP before signing in.");
+            throw new UnauthorizedAccessException(
+                    "Email address is not verified. Please verify your email with OTP before signing in.");
         }
 
+        // Credentials are valid — generate and send login OTP (no JWT yet)
+        MessageResponse otpResult = userService.initiateLoginOtp(normalizedEmail);
+        log.info("Login credentials validated for {}. Login OTP sent.", normalizedEmail);
+
+        return LoginOtpResponse.builder()
+                .requiresOtp(true)
+                .email(normalizedEmail)
+                .message(otpResult.getMessage())
+                .build();
+    }
+
+    /**
+     * Step 2 of login: verify the login OTP, then issue the JWT.
+     */
+    public AuthResponse verifyLoginOtp(VerifyOtpRequest request) {
+        User user = userService.verifyLoginOtp(request);
         UserPrincipal userPrincipal = new UserPrincipal(user);
         String token = jwtService.generateToken(userPrincipal);
 
@@ -81,5 +103,12 @@ public class AuthService {
                 .email(user.getEmail())
                 .role(user.getRole())
                 .build();
+    }
+
+    /**
+     * Resend login OTP (step 2 of login flow).
+     */
+    public MessageResponse resendLoginOtp(ResendOtpRequest request) {
+        return userService.resendLoginOtp(request.getEmail());
     }
 }

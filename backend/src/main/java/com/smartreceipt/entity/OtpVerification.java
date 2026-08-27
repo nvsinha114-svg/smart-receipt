@@ -33,6 +33,9 @@ public class OtpVerification {
     private LocalDateTime lastSentAt;
 
     @Builder.Default
+    private String purpose = "REGISTRATION"; // "REGISTRATION" or "LOGIN"
+
+    @Builder.Default
     private int attempts = 0;
 
     @Indexed(name = "expire_at_index", expireAfterSeconds = 0)
