@@ -49,6 +49,15 @@ jwt:
   secret: ${JWT_SECRET}
   expiration-ms: ${JWT_EXPIRATION_MS:86400000}
 
+resend:
+  api-key: ${RESEND_API_KEY:}
+  from: ${MAIL_FROM:onboarding@resend.dev}
+
+app:
+  email:
+    mock-fallback-enabled: ${EMAIL_MOCK_FALLBACK_ENABLED:true}
+
+
 tesseract:
   datapath: ${TESSERACT_DATAPATH:./tessdata}
   language: ${TESSERACT_LANGUAGE:eng}

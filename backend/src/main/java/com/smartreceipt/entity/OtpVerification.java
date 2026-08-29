@@ -29,6 +29,7 @@ public class OtpVerification {
     private String tempPassword; // Hashed password
     private Role tempRole;
 
+    @Indexed(name = "expires_at_index", expireAfterSeconds = 0)
     private LocalDateTime expiresAt;
     private LocalDateTime lastSentAt;
 
@@ -38,6 +39,5 @@ public class OtpVerification {
     @Builder.Default
     private int attempts = 0;
 
-    @Indexed(name = "expire_at_index", expireAfterSeconds = 0)
     private LocalDateTime createdAt;
 }

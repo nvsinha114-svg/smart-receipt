@@ -73,8 +73,15 @@ public class UserService {
 
         otpVerificationRepository.save(otpVerification);
 
-        // 4. Send email
-        emailService.sendOtpEmail(normalizedEmail, otp);
+        try {
+            // 4. Send email
+            emailService.sendOtpEmail(normalizedEmail, otp);
+            log.info("Registration OTP successfully sent to: {}", normalizedEmail);
+        } catch (Exception e) {
+            log.error("Failed to send verification email to {}. Cleaning up pending registration record.", normalizedEmail, e);
+            otpVerificationRepository.deleteByEmail(normalizedEmail);
+            throw e;
+        }
 
         return MessageResponse.builder()
                 .message("Verification code sent successfully to " + normalizedEmail + ". Please verify your email to complete registration.")
@@ -152,7 +159,13 @@ public class UserService {
 
         otpVerificationRepository.save(otpRecord);
 
-        emailService.sendOtpEmail(normalizedEmail, newOtp);
+        try {
+            emailService.sendOtpEmail(normalizedEmail, newOtp);
+            log.info("Resent registration OTP successfully to: {}", normalizedEmail);
+        } catch (Exception e) {
+            log.error("Failed to send resent registration OTP email to: {}", normalizedEmail, e);
+            throw e;
+        }
 
         return MessageResponse.builder()
                 .message("A new OTP code has been sent to " + normalizedEmail + ".")
@@ -182,13 +195,31 @@ public class UserService {
                 }
                 // Reuse existing record
                 String newOtp = emailService.generate6DigitOtp();
+                String oldOtpHash = existingOtp.getOtpHash();
+                LocalDateTime oldExpiresAt = existingOtp.getExpiresAt();
+                LocalDateTime oldLastSentAt = existingOtp.getLastSentAt();
+                int oldAttempts = existingOtp.getAttempts();
+
                 existingOtp.setOtpHash(passwordEncoder.encode(newOtp));
                 existingOtp.setExpiresAt(LocalDateTime.now().plusMinutes(5));
                 existingOtp.setLastSentAt(LocalDateTime.now());
                 existingOtp.setCreatedAt(LocalDateTime.now());
                 existingOtp.setAttempts(0);
                 otpVerificationRepository.save(existingOtp);
-                emailService.sendLoginOtpEmail(normalizedEmail, newOtp);
+
+                try {
+                    emailService.sendLoginOtpEmail(normalizedEmail, newOtp);
+                    log.info("Login OTP successfully sent (reused record) to: {}", normalizedEmail);
+                } catch (Exception e) {
+                    log.error("Failed to send login OTP email (reused record) to: {}. Reverting changes.", normalizedEmail, e);
+                    existingOtp.setOtpHash(oldOtpHash);
+                    existingOtp.setExpiresAt(oldExpiresAt);
+                    existingOtp.setLastSentAt(oldLastSentAt);
+                    existingOtp.setAttempts(oldAttempts);
+                    otpVerificationRepository.save(existingOtp);
+                    throw e;
+                }
+
                 return MessageResponse.builder()
                         .message("Login verification code sent to " + normalizedEmail + ".")
                         .email(normalizedEmail)
@@ -214,7 +245,15 @@ public class UserService {
                 .build();
 
         otpVerificationRepository.save(loginOtp);
-        emailService.sendLoginOtpEmail(normalizedEmail, otp);
+
+        try {
+            emailService.sendLoginOtpEmail(normalizedEmail, otp);
+            log.info("Login OTP successfully sent (new record) to: {}", normalizedEmail);
+        } catch (Exception e) {
+            log.error("Failed to send login OTP email (new record) to: {}. Cleaning up pending record.", normalizedEmail, e);
+            otpVerificationRepository.deleteByEmail(normalizedEmail);
+            throw e;
+        }
 
         return MessageResponse.builder()
                 .message("Login verification code sent to " + normalizedEmail + ".")
@@ -293,7 +332,13 @@ public class UserService {
         otpRecord.setAttempts(0);
         otpVerificationRepository.save(otpRecord);
 
-        emailService.sendLoginOtpEmail(normalizedEmail, newOtp);
+        try {
+            emailService.sendLoginOtpEmail(normalizedEmail, newOtp);
+            log.info("Resent login OTP successfully to: {}", normalizedEmail);
+        } catch (Exception e) {
+            log.error("Failed to send resent login OTP email to: {}", normalizedEmail, e);
+            throw e;
+        }
 
         return MessageResponse.builder()
                 .message("A new login OTP code has been sent to " + normalizedEmail + ".")
