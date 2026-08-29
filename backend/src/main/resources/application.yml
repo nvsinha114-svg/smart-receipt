@@ -26,7 +26,7 @@ spring:
       base-url: https://generativelanguage.googleapis.com/v1beta/openai/
       chat:
         options:
-          model: ${GEMINI_MODEL:gemini-2.5-flash}
+          model: ${GEMINI_MODEL:gemini-3.6-flash}
 
 jwt:
   secret: ${JWT_SECRET}
