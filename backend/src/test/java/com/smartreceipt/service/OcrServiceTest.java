@@ -43,6 +43,9 @@ class OcrServiceTest {
     @Mock
     private ImagePreprocessingService imagePreprocessingService;
 
+    @Mock
+    private DocumentClassificationService classificationService;
+
     @InjectMocks
     private OcrService ocrService;
 

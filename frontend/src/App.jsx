@@ -11,6 +11,8 @@ import Receipts from "./pages/Receipts";
 import ReceiptDetails from "./pages/ReceiptDetails";
 import EditReceipt from "./pages/EditReceipt";
 import Profile from "./pages/Profile";
+import MedicalReports from "./pages/MedicalReports";
+import MedicalReportDetails from "./pages/MedicalReportDetails";
 
 export default function App() {
   return (
@@ -29,6 +31,8 @@ export default function App() {
           <Route path="/receipts" element={<Receipts />} />
           <Route path="/receipts/:id" element={<ReceiptDetails />} />
           <Route path="/receipts/:id/edit" element={<EditReceipt />} />
+          <Route path="/medical-reports" element={<MedicalReports />} />
+          <Route path="/medical-reports/:id" element={<MedicalReportDetails />} />
           <Route path="/profile" element={<Profile />} />
         </Route>
       </Route>

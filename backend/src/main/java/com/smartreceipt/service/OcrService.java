@@ -1,5 +1,6 @@
 package com.smartreceipt.service;
 
+import com.smartreceipt.entity.DocumentType;
 import com.smartreceipt.dto.ReceiptAIItem;
 import com.smartreceipt.dto.ReceiptAIResponse;
 import com.smartreceipt.dto.ReceiptAITax;
@@ -51,6 +52,7 @@ public class OcrService {
     private final ReceiptService receiptService;
     private final AIReceiptParserService aiReceiptParserService;
     private final ImagePreprocessingService imagePreprocessingService;
+    private final DocumentClassificationService classificationService;
 
     @Value("${tesseract.datapath:./tessdata}")
     private String tesseractDataPath;
@@ -62,11 +64,13 @@ public class OcrService {
     public OcrService(ReceiptRepository receiptRepository,
                       ReceiptService receiptService,
                       AIReceiptParserService aiReceiptParserService,
-                      ImagePreprocessingService imagePreprocessingService) {
+                      ImagePreprocessingService imagePreprocessingService,
+                      DocumentClassificationService classificationService) {
         this.receiptRepository = receiptRepository;
         this.receiptService = receiptService;
         this.aiReceiptParserService = aiReceiptParserService;
         this.imagePreprocessingService = imagePreprocessingService != null ? imagePreprocessingService : new ImagePreprocessingService();
+        this.classificationService = classificationService;
     }
 
     public ReceiptResponse processReceiptUpload(MultipartFile file, UserPrincipal currentUser) {
@@ -92,6 +96,15 @@ public class OcrService {
 
             if (rawText == null || rawText.trim().isEmpty()) {
                 throw new OcrException("Failed to extract any text from the uploaded receipt.");
+            }
+
+            // Document Type Classification
+            DocumentType docType = classificationService.classifyDocument(rawText);
+            if (docType == DocumentType.MEDICAL_REPORT) {
+                throw new OcrException("This document is classified as a medical report. Please upload it to the Medical Report section.");
+            }
+            if (docType == DocumentType.UNKNOWN) {
+                throw new OcrException("This document could not be identified as a receipt or medical report.");
             }
 
             Receipt receipt = parseTextToReceipt(rawText);
