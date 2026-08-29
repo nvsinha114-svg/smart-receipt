@@ -259,15 +259,12 @@ public class AIReceiptParserService {
                     Do not subtract or add a value unless the document indicates its financial meaning.
 
                     ==================================================
-                    10. FINAL TOTAL / GRAND TOTAL
+                    10. FINAL TOTAL / GRAND TOTAL (AUTHORITATIVE)
                     ==================================================
 
                     THIS IS EXTREMELY IMPORTANT.
 
-                    The final total MUST NOT be selected simply because it is a large number or appears near the bottom.
-
-                    Search the COMPLETE document for explicit labels such as:
-
+                    Identify the final payable amount from the receipt's explicit final-total label:
                     - Grand Total
                     - Total
                     - Total Amount
@@ -280,19 +277,17 @@ public class AIReceiptParserService {
                     - Balance Due
                     - Payable Amount
 
-                    Prefer the value explicitly associated with the final payable amount.
-
-                    The final total must be validated against the financial components.
-
-                    For example:
-
-                    Items
-                    + taxes
-                    + charges
-                    - discounts
-                    ≈ final payable amount
-
-                    Use document-specific information rather than blindly calculating when the document provides an explicit final amount.
+                    RULES FOR TOTAL EXTRACTION:
+                    1. The printed final payable amount on the receipt MUST be treated as authoritative.
+                    2. NEVER invent, alter, or recalculate a printed final total when an explicit printed total is available on the receipt.
+                    3. Distinguish final total from subtotal, taxable amount, tax amount (CGST/SGST/IGST), item subtotal, shipping fee, discount, or other intermediate values.
+                    4. MULTI-COLUMN / INLINE TOTAL LINES:
+                       If a line contains multiple numbers such as:
+                       `TOTAL: ₹2,745.61 ₹17,999.00`
+                       interpret ₹2,745.61 as the tax (IGST) amount and ₹17,999.00 as the final total when supported by the surrounding receipt structure. Return ₹17,999.00 as the final total amount.
+                    5. NEGATIVE ADJUSTMENTS & CHARGES:
+                       Ignore negative adjustments (e.g. `-₹33.90`) or zero totals (e.g. `₹0.00`) when determining the final total amount.
+                    6. Return the exact printed total amount.
 
                     ==================================================
                     11. CURRENCY

@@ -820,6 +820,119 @@ class OcrServiceTest {
         assertEquals(new BigDecimal("9450.00"), receipt.getTaxes().get(0).getAmount());
     }
 
+    @Test
+    @DisplayName("Regression: TOTAL: ₹17,999.00 -> 17999.00")
+    void testTotalExtraction_SimpleTotalFormat() {
+        String ocrText = """
+                STORE ABC
+                Item A ₹15,253.39
+                TOTAL: ₹17,999.00
+                """;
+        BigDecimal total = ocrService.parseTotalAmount(ocrText);
+        assertEquals(new BigDecimal("17999.00"), total);
+    }
+
+    @Test
+    @DisplayName("Regression: GRAND TOTAL ₹18,019.00 -> 18019.00")
+    void testTotalExtraction_GrandTotalFormat() {
+        String ocrText = """
+                SUPERSTORE XYZ
+                Item A ₹15,253.39
+                Shipping Charges ₹20.00
+                GRAND TOTAL ₹18,019.00
+                """;
+        BigDecimal total = ocrService.parseTotalAmount(ocrText);
+        assertEquals(new BigDecimal("18019.00"), total);
+    }
+
+    @Test
+    @DisplayName("Regression: TOTAL: ₹2,745.61 ₹17,999.00 -> 17999.00")
+    void testTotalExtraction_MultiTokenLineIGSTAndFinalTotal() {
+        String ocrText = """
+                Amazon Seller Services Private Limited
+                Item 1 ₹15,253.39
+                TOTAL: ₹2,745.61 ₹17,999.00
+                """;
+        BigDecimal total = ocrService.parseTotalAmount(ocrText);
+        assertEquals(new BigDecimal("17999.00"), total);
+    }
+
+    @Test
+    @DisplayName("Regression: Negative shipping adjustment ₹33.90 -₹33.90 must not become final total")
+    void testTotalExtraction_NegativeAdjustmentNotSelectedAsTotal() {
+        String ocrText = """
+                RETAIL SHOP
+                Item A ₹500.00
+                Shipping Charges ₹33.90 -₹33.90 ₹0.00
+                TOTAL AMOUNT: ₹500.00
+                """;
+        BigDecimal total = ocrService.parseTotalAmount(ocrText);
+        assertEquals(new BigDecimal("500.00"), total);
+    }
+
+    @Test
+    @DisplayName("Regression: Indian comma formatting ₹1,17,999.00 -> 117999.00")
+    void testTotalExtraction_IndianLakhsCommaFormatting() {
+        String ocrText = """
+                JEWELRY SHOP
+                Gold Ring ₹1,17,999.00
+                TOTAL: ₹1,17,999.00
+                """;
+        BigDecimal total = ocrService.parseTotalAmount(ocrText);
+        assertEquals(new BigDecimal("117999.00"), total);
+    }
+
+    @Test
+    @DisplayName("Regression: Subtotal + tax + discount with explicit printed total prefers printed total")
+    void testTotalExtraction_ExplicitPrintedTotalOverridesCalculation() {
+        String ocrText = """
+                FASHION MART
+                Subtotal: ₹10,000.00
+                Discount: ₹1,000.00
+                Tax 18%: ₹1,620.00
+                TOTAL PAYABLE: ₹10,620.00
+                """;
+        BigDecimal total = ocrService.parseTotalAmount(ocrText);
+        assertEquals(new BigDecimal("10620.00"), total);
+    }
+
+    @Test
+    @DisplayName("Regression: Receipt without explicit total label uses calculated fallback")
+    void testTotalExtraction_NoExplicitTotalUsesCalculatedFallback() {
+        String ocrText = """
+                QUICK BITES
+                Burger ₹200.00
+                Fries ₹100.00
+                """;
+        Receipt receipt = ocrService.parseTextToReceipt(ocrText);
+        assertNotNull(receipt);
+        assertEquals(new BigDecimal("300.00"), receipt.getTotalAmount());
+    }
+
+    @Test
+    @DisplayName("Regression: Java validation layer overrides incorrect AI total with explicit printed total")
+    void testTotalExtraction_AiIncorrectTotalOverriddenByPrintedTotal() {
+        when(aiReceiptParserService.isAiEnabled()).thenReturn(true);
+        ReceiptAIResponse mockResponse = ReceiptAIResponse.builder()
+                .merchantName("Amazon")
+                .currency("INR")
+                .financials(com.smartreceipt.dto.ReceiptAIFinancials.builder()
+                        .totalAmount(new BigDecimal("18019.00"))
+                        .build())
+                .build();
+        when(aiReceiptParserService.parseReceiptText(anyString())).thenReturn(mockResponse);
+
+        String ocrText = """
+                Amazon Seller Services Private Limited
+                Item ₹15,253.39
+                TOTAL: ₹2,745.61 ₹17,999.00
+                """;
+
+        Receipt receipt = ocrService.parseTextToReceipt(ocrText);
+        assertNotNull(receipt);
+        assertEquals(new BigDecimal("17999.00"), receipt.getTotalAmount());
+    }
+
     private BufferedImage createSampleImage(int w, int h) {
         BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = img.createGraphics();

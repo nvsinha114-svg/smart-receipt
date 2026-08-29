@@ -430,11 +430,12 @@ public class OcrService {
 
                     /*
                      * Validation & Total Selection:
-                     * 1. Explicit AI financial total is primary.
-                     * 2. Deterministic OCR total acts as a validation layer around AI.
-                     * 3. Calculated items sum is strictly a last resort fallback when no explicit total exists.
+                     * 1. Deterministic OCR total (extracted from explicit printed label in OCR text) is authoritative.
+                     * 2. If AI total differs from an explicit printed OCR total, prefer the explicit printed OCR total.
+                     * 3. Do not recalculate or override an explicit printed total with a calculated item sum.
                      */
                     BigDecimal finalTotal = null;
+                    BigDecimal ocrTotal = parseTotalAmount(text);
 
                     if (aiResponse.getFinancials() != null && aiResponse.getFinancials().getTotalAmount() != null
                             && aiResponse.getFinancials().getTotalAmount().compareTo(BigDecimal.ZERO) > 0) {
@@ -442,15 +443,12 @@ public class OcrService {
                         log.info("Extracted primary total from AI financials: {}", finalTotal);
                     }
 
-                    // Deterministic OCR total validation layer
-                    BigDecimal ocrTotal = parseTotalAmount(text);
                     if (ocrTotal != null && ocrTotal.compareTo(BigDecimal.ZERO) > 0) {
                         if (finalTotal == null || finalTotal.compareTo(BigDecimal.ZERO) <= 0) {
                             finalTotal = ocrTotal;
-                            log.info("AI financial total was missing/zero. Using deterministic OCR total: {}", finalTotal);
-                        } else if (finalTotal.compareTo(new BigDecimal("100000")) > 0
-                                && ocrTotal.compareTo(new BigDecimal("100000")) < 0) {
-                            log.warn("AI financial total ({}) is unrealistically large compared to explicit OCR total ({}). Preferring explicit OCR total.", finalTotal, ocrTotal);
+                            log.info("AI financial total was missing/zero. Using explicit printed OCR total: {}", finalTotal);
+                        } else if (finalTotal.compareTo(ocrTotal) != 0) {
+                            log.warn("AI financial total ({}) differs from explicit printed OCR total ({}). Preferring explicit printed OCR total.", finalTotal, ocrTotal);
                             finalTotal = ocrTotal;
                         }
                     }
@@ -780,12 +778,16 @@ public class OcrService {
             return null;
         }
 
-        Pattern pattern = Pattern.compile("(?:₹|rs\\.?|inr|\\$)?\\s*([0-9,]+(?:\\.[0-9]{1,2})?)\\b", Pattern.CASE_INSENSITIVE);
+        Pattern pattern = Pattern.compile("(-)?(?:₹|rs\\.?|inr|\\$)?\\s*([0-9,]+(?:\\.[0-9]{1,2})?)\\b", Pattern.CASE_INSENSITIVE);
         Matcher matcher = pattern.matcher(line);
 
         BigDecimal lastValue = null;
         while (matcher.find()) {
-            String token = matcher.group(1);
+            boolean isNegative = matcher.group(1) != null;
+            if (isNegative) {
+                continue; // Ignore negative adjustments such as -₹33.90
+            }
+            String token = matcher.group(2);
             BigDecimal value = parseAndNormalizeMonetaryToken(token);
             if (value != null && value.compareTo(BigDecimal.ZERO) > 0) {
                 lastValue = value;
