@@ -6,8 +6,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
@@ -20,23 +18,25 @@ public class EmailService {
 
     private static final Logger log = LoggerFactory.getLogger(EmailService.class);
 
-    private final JavaMailSender mailSender;
     private final RestClient restClient;
     private final SecureRandom secureRandom = new SecureRandom();
 
-    @Value("${resend.api-key:}")
-    private String resendApiKey;
+    @Value("${brevo.api-key:}")
+    private String brevoApiKey;
 
-    @Value("${resend.from:onboarding@resend.dev}")
-    private String resendFrom;
+    @Value("${brevo.from:}")
+    private String mailFrom;
 
-    @Value("${app.email.mock-fallback-enabled:true}")
+    @Value("${app.email.mock-fallback-enabled:false}")
     private boolean mockFallbackEnabled;
 
-    @Autowired(required = false)
-    public EmailService(JavaMailSender mailSender) {
-        this.mailSender = mailSender;
-        this.restClient = RestClient.builder().baseUrl("https://api.resend.com").build();
+    public EmailService() {
+        this.restClient = RestClient.builder().baseUrl("https://api.brevo.com/v3").build();
+    }
+
+    // Visible for testing
+    EmailService(RestClient restClient) {
+        this.restClient = restClient;
     }
 
     public String generate6DigitOtp() {
@@ -60,61 +60,64 @@ public class EmailService {
         boolean isProd = isProductionEnvironment();
         boolean effectiveMockFallback = mockFallbackEnabled && !isProd;
 
-        // 1. Try Resend if configured
-        if (resendApiKey != null && !resendApiKey.trim().isEmpty()) {
-            log.info("Sending {} OTP email to: {} via Resend API", purpose, recipientEmail);
+        if (brevoApiKey != null && !brevoApiKey.trim().isEmpty()) {
+            log.info("Sending {} OTP email to recipient via Brevo API", purpose);
             try {
-                ResendEmailRequest request = new ResendEmailRequest(resendFrom, recipientEmail, subject, text);
+                BrevoEmailRequest request = new BrevoEmailRequest(mailFrom, recipientEmail, subject, text);
                 ResponseEntity<String> response = restClient.post()
-                        .uri("/emails")
-                        .header("Authorization", "Bearer " + resendApiKey)
+                        .uri("/smtp/email")
+                        .header("accept", "application/json")
+                        .header("api-key", brevoApiKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(request)
                         .retrieve()
                         .toEntity(String.class);
 
                 if (response.getStatusCode().is2xxSuccessful()) {
-                    log.info("Successfully sent {} email via Resend to {}", purpose, recipientEmail);
+                    log.info("OTP email submitted successfully through Brevo");
                     return;
                 } else {
-                    String errorBody = response.getBody();
-                    log.error("Failed to send email via Resend. Status: {}, Response: {}", response.getStatusCode(), errorBody);
-                    throw new RuntimeException("Resend API failed: " + response.getStatusCode() + " - " + errorBody);
+                    int statusCode = response.getStatusCode().value();
+                    String statusText = response.getStatusCode().toString();
+                    throw new RuntimeException("Brevo API returned status code " + statusCode + " - " + statusText);
+                }
+            } catch (org.springframework.web.client.RestClientResponseException e) {
+                int statusCode = e.getStatusCode().value();
+                String statusText = e.getStatusText();
+                String errorMsg;
+                if (statusCode == 401) {
+                    errorMsg = "Brevo email delivery failed: 401 Unauthorized (Invalid API Key)";
+                } else if (statusCode == 403) {
+                    errorMsg = "Brevo email delivery failed: 403 Forbidden (Sender not verified or account suspended)";
+                } else if (statusCode == 400) {
+                    errorMsg = "Brevo email delivery failed: 400 Bad Request (Invalid parameters)";
+                } else if (statusCode == 429) {
+                    errorMsg = "Brevo email delivery failed: 429 Too Many Requests (Rate limit exceeded)";
+                } else if (statusCode >= 500) {
+                    errorMsg = "Brevo email delivery failed: " + statusCode + " Server Error (Brevo service unavailable)";
+                } else {
+                    errorMsg = "Brevo email delivery failed: " + statusCode + " " + statusText;
+                }
+                log.error("Brevo API call failed: {}", errorMsg);
+                if (!effectiveMockFallback) {
+                    throw new RuntimeException(errorMsg);
                 }
             } catch (Exception e) {
-                log.error("Error sending {} email via Resend: {}", purpose, e.getMessage());
-                throw new RuntimeException("Resend email delivery failed: " + e.getMessage(), e);
-            }
-        }
-
-        // 2. Try SMTP if configured and Resend is not set
-        if (mailSender != null) {
-            log.info("Sending {} OTP email to: {} via SMTP", purpose, recipientEmail);
-            try {
-                SimpleMailMessage message = new SimpleMailMessage();
-                message.setTo(recipientEmail);
-                message.setSubject(subject);
-                message.setText(text);
-                mailSender.send(message);
-                log.info("Successfully sent {} OTP email via SMTP to {}", purpose, recipientEmail);
-                return;
-            } catch (Exception e) {
-                log.error("Failed to send {} OTP via SMTP: {}", purpose, e.getMessage());
+                log.error("Error sending {} email via Brevo: {}", purpose, e.getMessage());
                 if (!effectiveMockFallback) {
-                    throw new RuntimeException("SMTP email delivery failed and mock fallback is disabled in production environment", e);
+                    throw new RuntimeException("Brevo email delivery failed: " + e.getMessage(), e);
                 }
             }
         } else {
-            log.warn("JavaMailSender is not configured.");
+            log.warn("Brevo API Key is not configured.");
             if (!effectiveMockFallback) {
-                throw new RuntimeException("No email sender (Resend or SMTP) configured and mock fallback is disabled in production environment");
+                throw new RuntimeException("Brevo email delivery failed: API key is not configured and mock fallback is disabled");
             }
         }
 
-        // 3. Fallback only in development/testing
         if (effectiveMockFallback) {
             log.info("=================================================");
-            log.info("MOCK {} EMAIL SENT TO: {}", purpose, recipientEmail);
+            log.info("MOCK {} EMAIL SENT TO RECIPIENT", purpose);
             log.info("VERIFICATION CODE (OTP): {}", otp);
             log.info("=================================================");
         }
@@ -127,17 +130,35 @@ public class EmailService {
             || "production".equalsIgnoreCase(System.getProperty("spring.profiles.active"));
     }
 
-    private static class ResendEmailRequest {
-        public final String from;
-        public final List<String> to;
+    private static class BrevoEmailRequest {
+        public final Sender sender;
+        public final List<Recipient> to;
         public final String subject;
-        public final String html;
+        public final String htmlContent;
 
-        public ResendEmailRequest(String from, String to, String subject, String text) {
-            this.from = from;
-            this.to = Collections.singletonList(to);
+        public BrevoEmailRequest(String from, String toEmail, String subject, String text) {
+            this.sender = new Sender("Smart Receipt", from);
+            this.to = Collections.singletonList(new Recipient(toEmail));
             this.subject = subject;
-            this.html = text.replace("\n", "<br>");
+            this.htmlContent = text.replace("\n", "<br>");
+        }
+    }
+
+    private static class Sender {
+        public final String name;
+        public final String email;
+
+        public Sender(String name, String email) {
+            this.name = name;
+            this.email = email;
+        }
+    }
+
+    private static class Recipient {
+        public final String email;
+
+        public Recipient(String email) {
+            this.email = email;
         }
     }
 }
