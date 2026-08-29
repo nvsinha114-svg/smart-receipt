@@ -20,7 +20,7 @@ public class DocumentClassificationService {
 
     @Autowired
     public DocumentClassificationService(org.springframework.beans.factory.ObjectProvider<ChatModel> chatModelProvider,
-                                         @Value("${spring.ai.vertex.ai.gemini.api-key:}") String apiKey) {
+                                         @Value("${spring.ai.openai.api-key:}") String apiKey) {
         ChatModel chatModel = chatModelProvider.getIfAvailable();
         if (chatModel != null && apiKey != null && !apiKey.trim().isEmpty() 
                 && !apiKey.equals("dummy-key-to-bypass-startup-check") 
@@ -46,12 +46,12 @@ public class DocumentClassificationService {
 
         log.info("Classification scoring: receiptScore={}, medicalScore={}", receiptScore, medicalScore);
 
-        // Strong deterministic classification if one score is highly dominant
-        if (receiptScore > 8 && medicalScore == 0) {
+        // Strong deterministic classification if one score clearly dominates (avoids unnecessary AI calls)
+        if ((receiptScore > 8 && medicalScore == 0) || (receiptScore >= 6 && receiptScore >= medicalScore * 3) || (receiptScore - medicalScore >= 10)) {
             log.info("Classified as RECEIPT deterministically based on keyword scoring.");
             return DocumentType.RECEIPT;
         }
-        if (medicalScore > 8 && receiptScore == 0) {
+        if ((medicalScore > 8 && receiptScore == 0) || (medicalScore >= 6 && medicalScore >= receiptScore * 3) || (medicalScore - receiptScore >= 10)) {
             log.info("Classified as MEDICAL_REPORT deterministically based on keyword scoring.");
             return DocumentType.MEDICAL_REPORT;
         }

@@ -92,9 +92,12 @@ public class MedicalReportController {
                     .analysis(savedReport)
                     .build(), HttpStatus.CREATED);
 
-        } catch (Exception e) {
-            log.error("Medical report processing failed", e);
+        } catch (IllegalArgumentException | OcrException e) {
+            log.error("Medical report validation failed: {}", e.getMessage());
             throw e;
+        } catch (Exception e) {
+            log.error("Medical report processing failed: {}", e.getMessage());
+            throw new RuntimeException(e.getMessage() != null && !e.getMessage().isEmpty() ? e.getMessage() : "Medical analysis service is temporarily unavailable. Please try again.");
         } finally {
             if (tempFile != null && tempFile.exists()) {
                 try {

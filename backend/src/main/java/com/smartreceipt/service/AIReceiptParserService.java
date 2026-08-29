@@ -17,7 +17,7 @@ public class AIReceiptParserService {
 
     @Autowired
     public AIReceiptParserService(org.springframework.beans.factory.ObjectProvider<ChatModel> chatModelProvider,
-                                  @Value("${spring.ai.vertex.ai.gemini.api-key:}") String apiKey) {
+                                  @Value("${spring.ai.openai.api-key:}") String apiKey) {
         ChatModel chatModel = chatModelProvider.getIfAvailable();
         if (chatModel != null && apiKey != null && !apiKey.trim().isEmpty() 
                 && !apiKey.equals("dummy-key-to-bypass-startup-check") 

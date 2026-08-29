@@ -21,15 +21,12 @@ spring:
 
 
   ai:
-    vertex:
-      ai:
-        gemini:
-          api-key: ${GEMINI_API_KEY:dummy-key-to-bypass-startup-check}
-          location: ${GEMINI_LOCATION:us-central1}
-          project-id: ${GEMINI_PROJECT_ID:smart-receipt}
-          chat:
-            options:
-              model: ${GEMINI_MODEL:gemini-1.5-flash}
+    openai:
+      api-key: ${GEMINI_API_KEY:dummy-key-to-bypass-startup-check}
+      base-url: https://generativelanguage.googleapis.com/v1beta/openai/
+      chat:
+        options:
+          model: ${GEMINI_MODEL:gemini-2.5-flash}
 
 jwt:
   secret: ${JWT_SECRET}

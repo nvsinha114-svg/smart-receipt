@@ -52,14 +52,14 @@ public class MedicalReportAnalysisService {
 
     @Autowired
     public MedicalReportAnalysisService(org.springframework.beans.factory.ObjectProvider<ChatModel> chatModelProvider,
-                                         @Value("${spring.ai.vertex.ai.gemini.api-key:}") String apiKey) {
+                                         @Value("${spring.ai.openai.api-key:}") String apiKey) {
         ChatModel chatModel = chatModelProvider.getIfAvailable();
         if (chatModel != null && apiKey != null && !apiKey.trim().isEmpty() 
                 && !apiKey.equals("dummy-key-to-bypass-startup-check") 
                 && !apiKey.contains("GEMINI_API_KEY")) {
             this.chatClient = ChatClient.create(chatModel);
             this.isAiEnabled = true;
-            log.info("MedicalReportAnalysisService initialized with Google Gemini ChatModel.");
+            log.info("MedicalReportAnalysisService initialized with Gemini API ChatModel.");
         } else {
             this.chatClient = null;
             this.isAiEnabled = false;
@@ -79,11 +79,23 @@ public class MedicalReportAnalysisService {
                         .call()
                         .entity(MedicalReportAIResponse.class);
             } catch (Exception e) {
-                log.error("AI medical parsing failed", e);
-                throw new RuntimeException("Medical analysis failed during AI parsing: " + e.getMessage(), e);
+                String errMsg = e.getMessage() != null ? e.getMessage() : "";
+                log.error("AI medical parsing failed: {}", errMsg);
+                
+                if (errMsg.contains("401") || errMsg.contains("403") || errMsg.contains("Unauthorized") || errMsg.contains("Forbidden")) {
+                    throw new RuntimeException("Gemini authentication/configuration error. Please verify API key setup.");
+                } else if (errMsg.contains("429") || errMsg.contains("RESOURCE_EXHAUSTED") || errMsg.contains("Rate limit")) {
+                    throw new RuntimeException("Gemini service rate limit exceeded. Please try again in a few moments.");
+                } else if (errMsg.contains("500") || errMsg.contains("503") || errMsg.contains("UNAVAILABLE")) {
+                    throw new RuntimeException("Medical analysis service is temporarily unavailable. Please try again.");
+                } else if (errMsg.toLowerCase().contains("timeout")) {
+                    throw new RuntimeException("Gemini request timed out. Please try again.");
+                }
+                
+                throw new RuntimeException("Medical analysis service is temporarily unavailable. Please try again.");
             }
         } else {
-            throw new RuntimeException("Medical analysis failed: AI parser is not enabled/configured.");
+            throw new RuntimeException("Medical analysis failed: Gemini API key is not enabled/configured.");
         }
 
         log.info("AI parsing completed");
