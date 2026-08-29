@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -32,6 +33,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/receipts")
 @RequiredArgsConstructor
@@ -107,8 +109,15 @@ public class ReceiptController {
     public ResponseEntity<ReceiptResponse> uploadReceipt(
             @Parameter(description = "Receipt image or PDF file") @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal UserPrincipal currentUser) {
-        ReceiptResponse response = ocrService.processReceiptUpload(file, currentUser);
-        return new ResponseEntity<>(response, HttpStatus.CREATED);
+        log.info("OCR upload request received");
+        try {
+            ReceiptResponse response = ocrService.processReceiptUpload(file, currentUser);
+            log.info("OCR upload response returned");
+            return new ResponseEntity<>(response, HttpStatus.CREATED);
+        } catch (Exception e) {
+            log.error("OCR processing failed", e);
+            throw e;
+        }
     }
 
     @GetMapping("/{id}/pdf")

@@ -71,6 +71,7 @@ public class OcrService {
 
     public ReceiptResponse processReceiptUpload(MultipartFile file, UserPrincipal currentUser) {
         validateFile(file);
+        log.info("Image validation completed");
 
         File tempFile = null;
         try {
@@ -85,7 +86,9 @@ public class OcrService {
             log.info("Processing receipt upload: filename={}, size={} bytes, mimeType={}",
                     originalFilename, file.getSize(), file.getContentType());
 
+            log.info("OCR processing started");
             String rawText = extractRawText(tempFile, extension);
+            log.info("OCR processing completed");
 
             if (rawText == null || rawText.trim().isEmpty()) {
                 throw new OcrException("Failed to extract any text from the uploaded receipt.");
@@ -95,7 +98,9 @@ public class OcrService {
             receipt.setUserId(currentUser.getId());
             receipt.setCreatedAt(LocalDateTime.now());
 
+            log.info("Receipt persistence started");
             Receipt savedReceipt = receiptRepository.save(receipt);
+            log.info("Receipt persistence completed");
             
             // ========== SMART RECEIPT DEBUG LOGGING ==========
             log.info("\n========== SMART RECEIPT DEBUG ==========\n" +

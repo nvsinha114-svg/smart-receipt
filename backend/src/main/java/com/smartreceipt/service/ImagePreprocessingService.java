@@ -70,11 +70,6 @@ public class ImagePreprocessingService {
                 variants.add(new ImageVariant("Adaptive_Threshold", variantB));
             }
 
-            // 6. Variant C: Sharpening (for blurry camera photos)
-            BufferedImage variantC = sharpenImage(variantA != null ? variantA : scaled);
-            if (variantC != null) {
-                variants.add(new ImageVariant("Sharpened", variantC));
-            }
 
         } catch (Exception e) {
             log.warn("Non-fatal warning in image preprocessing pipeline: {}. Falling back to baseline image.", e.getMessage());

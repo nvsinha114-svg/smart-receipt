@@ -38,6 +38,7 @@ public class AIReceiptParserService {
         }
 
         try {
+            log.info("AI parsing started");
             log.info("Sending raw OCR text to LLM for structured document parsing...");
             String systemInstruction = """
                     You are an advanced financial document understanding engine for the Smart Receipt application.
@@ -470,11 +471,13 @@ public class AIReceiptParserService {
                     The final output must represent the actual financial document as accurately as possible.
                     """;
 
-            return chatClient.prompt()
+            ReceiptAIResponse response = chatClient.prompt()
                     .system(systemInstruction)
                     .user(ocrText)
                     .call()
                     .entity(ReceiptAIResponse.class);
+            log.info("AI parsing completed");
+            return response;
 
         } catch (Exception e) {
             log.error("AI parsing failed or timed out. Falling back to local OCR parser. Error: {}", e.getMessage(), e);
