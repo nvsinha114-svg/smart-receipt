@@ -51,7 +51,7 @@ export default function ReceiptDetails(){
               {r.totalTax != null && taxes.length === 0 && <tr><td style={{ padding: "4px 0", color: "#64748b" }}>Total Tax</td><td style={{ textAlign: "right", fontWeight: "600" }}>{fmt(r.totalTax)}</td></tr>}
               {r.discount != null && Number(r.discount) > 0 && <tr><td style={{ padding: "4px 0", color: "#64748b" }}>Discount</td><td style={{ textAlign: "right", color: "#e11d48", fontWeight: "600" }}>-{fmt(r.discount)}</td></tr>}
               {r.shippingAmount != null && Number(r.shippingAmount) > 0 && <tr><td style={{ padding: "4px 0", color: "#64748b" }}>Shipping / Delivery</td><td style={{ textAlign: "right", fontWeight: "600" }}>{fmt(r.shippingAmount)}</td></tr>}
-              <tr style={{ borderTop: "1px solid #cbd5e1", fontWeight: "700" }}><td style={{ padding: "8px 0" }}>Grand Total</td><td style={{ textAlign: "right", padding: "8px 0", color: "#0f172a" }}>{fmt(effectiveTotal)}</td></tr>
+              <tr style={{ borderTop: "1px solid #cbd5e1", fontWeight: "700" }}><td style={{ padding: "8px 0" }}>Grand Total</td><td style={{ textAlign: "right", padding: "8px 0", color: "#ffffff" }}>{fmt(effectiveTotal)}</td></tr>
             </tbody>
           </table>
         </div>
