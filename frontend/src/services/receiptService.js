@@ -11,9 +11,9 @@ export const uploadReceipt = (file) => {
   form.append("file", file);
   return api.post("/api/receipts/upload", form, {
     headers: { "Content-Type": "multipart/form-data" },
-    timeout: 120000
+    timeout: 180000 // 180s to allow for Render cold starts + Tesseract OCR + AI processing
   });
 };
 
 export const downloadReceiptPdf = (id) =>
-  api.get(`/api/receipts/${id}/pdf`, { responseType: "blob", timeout: 60000 });
+  api.get(`/api/receipts/${id}/pdf`, { responseType: "blob", timeout: 120000 });

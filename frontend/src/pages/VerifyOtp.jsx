@@ -75,7 +75,7 @@ export default function VerifyOtp() {
         }, 1500);
       }
     } catch (err) {
-      const msg = err.response?.data?.message || err.message || "OTP verification failed. Please try again.";
+      const msg = err.friendlyMessage || err.response?.data?.message || err.message || "OTP verification failed. Please try again.";
       setError(msg);
     } finally {
       setLoading(false);
@@ -98,7 +98,7 @@ export default function VerifyOtp() {
       }
       setCooldown(60);
     } catch (err) {
-      const msg = err.response?.data?.message || err.message || "Failed to resend OTP. Please try again.";
+      const msg = err.friendlyMessage || err.response?.data?.message || err.message || "Failed to resend OTP. Please try again.";
       setError(msg);
     } finally {
       setResendLoading(false);

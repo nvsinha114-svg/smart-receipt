@@ -1,15 +1,91 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Download, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, Pencil, Trash2, Loader2, RefreshCw, AlertCircle } from "lucide-react";
 import { deleteReceipt, downloadReceiptPdf, getReceipt } from "../services/receiptService";
 
 export default function ReceiptDetails(){
-  const {id}=useParams(),navigate=useNavigate(),[r,setR]=useState(null),[error,setError]=useState("");
-  useEffect(()=>{getReceipt(id).then(x=>setR(x.data)).catch(e=>setError(e.response?.data?.message||"Receipt not found"))},[id]);
-  const pdf=async()=>{const x=await downloadReceiptPdf(id);const url=URL.createObjectURL(x.data);const a=document.createElement("a");a.href=url;a.download=`receipt-${id}.pdf`;a.click();URL.revokeObjectURL(url)};
-  const remove=async()=>{if(!confirm("Delete this receipt?"))return;await deleteReceipt(id);navigate("/receipts")};
-  if(error)return <div className="page"><div className="card empty">{error}<br/><Link className="text-link" to="/receipts">Back to receipts</Link></div></div>;
-  if(!r)return <div className="page"><div className="card empty">Loading...</div></div>;
+  const { id } = useParams(), navigate = useNavigate();
+  const [r, setR] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [pdfError, setPdfError] = useState("");
+
+  const load = () => {
+    setLoading(true);
+    setError("");
+    getReceipt(id)
+      .then((x) => setR(x.data))
+      .catch((e) => setError(e.friendlyMessage || e.response?.data?.message || "Receipt not found"))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+  }, [id]);
+
+  const pdf = async () => {
+    if (downloadingPdf) return;
+    setDownloadingPdf(true);
+    setPdfError("");
+    try {
+      const x = await downloadReceiptPdf(id);
+      const url = URL.createObjectURL(x.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `receipt-${id}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setPdfError(
+        e.friendlyMessage ||
+        "PDF generation is taking longer than usual. Please wait a moment and try again."
+      );
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!confirm("Delete this receipt?")) return;
+    try {
+      await deleteReceipt(id);
+      navigate("/receipts");
+    } catch (e) {
+      alert(e.friendlyMessage || "Failed to delete receipt.");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="page">
+        <div className="card empty">
+          <Loader2 size={24} className="spin" style={{ margin: "0 auto 12px" }} />
+          Loading receipt details...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="page">
+        <div className="card empty">
+          <p style={{ color: "#fb7185", marginBottom: "16px" }}>{error}</p>
+          <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+            <button className="primary-btn small" onClick={load}>
+              <RefreshCw size={14} /> Retry
+            </button>
+            <Link className="secondary-btn small" to="/receipts">
+              Back to receipts
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!r) return <div className="page"><div className="card empty">Receipt not found.</div></div>;
 
   const items = r.items || [];
   const itemsSum = items.reduce((sum, item) => sum + (Number(item.quantity || 1) * Number(item.price || 0)), 0);
@@ -19,7 +95,34 @@ export default function ReceiptDetails(){
 
   const taxes = r.taxes || [];
 
-  return <div className="page"><header className="topbar"><div><Link className="back-link" to="/receipts"><ArrowLeft size={16}/> Back</Link><h1>{r.merchantName||"Receipt"}{r.category && <span className="category-badge" style={{marginLeft: "12px"}}>{r.category}</span>}</h1><p className="muted">{r.receiptDate||"No date"} · ID {r.id}</p></div><div className="actions"><button className="secondary-btn" onClick={pdf}><Download size={17}/> PDF</button><Link className="secondary-btn" to={`/receipts/${id}/edit`}><Pencil size={17}/> Edit</Link><button className="danger-btn" onClick={remove}><Trash2 size={17}/> Delete</button></div></header>
+  return (
+    <div className="page">
+      {pdfError && (
+        <div className="alert error" style={{ marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <AlertCircle size={18} />
+            <span>{pdfError}</span>
+          </div>
+          <button className="primary-btn small" onClick={pdf} disabled={downloadingPdf}>
+            Try Again
+          </button>
+        </div>
+      )}
+      <header className="topbar">
+        <div>
+          <Link className="back-link" to="/receipts"><ArrowLeft size={16}/> Back</Link>
+          <h1>{r.merchantName||"Receipt"}{r.category && <span className="category-badge" style={{marginLeft: "12px"}}>{r.category}</span>}</h1>
+          <p className="muted">{r.receiptDate||"No date"} · ID {r.id}</p>
+        </div>
+        <div className="actions">
+          <button className="secondary-btn" onClick={pdf} disabled={downloadingPdf}>
+            {downloadingPdf ? <Loader2 size={16} className="spin" /> : <Download size={17}/>}
+            {downloadingPdf ? "Generating PDF..." : "PDF"}
+          </button>
+          <Link className="secondary-btn" to={`/receipts/${id}/edit`}><Pencil size={17}/> Edit</Link>
+          <button className="danger-btn" onClick={remove}><Trash2 size={17}/> Delete</button>
+        </div>
+      </header>
     <div className="card receipt-detail">
       <div className="receipt-total"><span>Total amount</span><strong>{fmt(effectiveTotal)}</strong></div>
       <h3>Items</h3>
@@ -56,6 +159,7 @@ export default function ReceiptDetails(){
           </table>
         </div>
       )}
+      </div>
     </div>
-  </div>
+  );
 }

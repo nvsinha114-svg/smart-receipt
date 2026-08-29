@@ -9,11 +9,13 @@ export default function MedicalReports() {
   const [error, setError] = useState("");
 
   const fetchReports = async () => {
+    setLoading(true);
+    setError("");
     try {
       const r = await getMedicalReports();
       setReports(r.data);
     } catch (err) {
-      setError("Failed to load medical reports.");
+      setError(err.friendlyMessage || "Failed to load medical reports.");
     } finally {
       setLoading(false);
     }
@@ -29,7 +31,7 @@ export default function MedicalReports() {
       await deleteMedicalReport(id);
       setReports(reports.filter((r) => r.id !== id));
     } catch (err) {
-      alert("Failed to delete medical report.");
+      alert(err.friendlyMessage || "Failed to delete medical report.");
     }
   };
 
@@ -49,7 +51,12 @@ export default function MedicalReports() {
       {loading ? (
         <div className="empty">Loading medical reports...</div>
       ) : error ? (
-        <div className="alert error">{error}</div>
+        <div className="card empty">
+          <p style={{ color: "#fb7185", marginBottom: "16px" }}>{error}</p>
+          <button className="primary-btn small" onClick={fetchReports}>
+            Retry
+          </button>
+        </div>
       ) : reports.length === 0 ? (
         <div className="card empty">
           <FileText size={48} style={{ marginBottom: "1rem", color: "var(--muted)" }} />

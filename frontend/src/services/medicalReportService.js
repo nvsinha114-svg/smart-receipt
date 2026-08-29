@@ -9,6 +9,6 @@ export const analyzeMedicalReport = (file) => {
   form.append("file", file);
   return api.post("/api/medical-reports/analyze", form, {
     headers: { "Content-Type": "multipart/form-data" },
-    timeout: 120000
+    timeout: 180000 // 180s to allow for Render cold starts + Tesseract OCR + AI processing
   });
 };

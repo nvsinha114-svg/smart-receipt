@@ -30,7 +30,7 @@ export default function Login() {
         setError("Unexpected login response. Please try again.");
       }
     } catch (err) {
-      const msg = err.response?.data?.message || err.message || "Invalid email or password";
+      const msg = err.friendlyMessage || err.response?.data?.message || err.message || "Invalid email or password";
       setError(msg);
     } finally {
       setLoading(false);

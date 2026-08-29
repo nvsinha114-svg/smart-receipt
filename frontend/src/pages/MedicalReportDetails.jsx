@@ -5,19 +5,25 @@ import { getMedicalReport, deleteMedicalReport } from "../services/medicalReport
 
 export default function MedicalReportDetails() {
   const { id } = useParams(), navigate = useNavigate();
-  const [report, setReport] = useState(null), [loading, setLoading] = useState(true), [error, setError] = useState("");
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const loadReport = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const r = await getMedicalReport(id);
+      setReport(r.data);
+    } catch (err) {
+      setError(err.friendlyMessage || "Medical report not found or access denied.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    (async () => {
-      try {
-        const r = await getMedicalReport(id);
-        setReport(r.data);
-      } catch (err) {
-        setError("Medical report not found or access denied.");
-      } finally {
-        setLoading(false);
-      }
-    })();
+    loadReport();
   }, [id]);
 
   const handleDelete = async () => {
@@ -26,7 +32,7 @@ export default function MedicalReportDetails() {
       await deleteMedicalReport(id);
       navigate("/medical-reports");
     } catch (err) {
-      alert("Failed to delete medical report.");
+      alert(err.friendlyMessage || "Failed to delete medical report.");
     }
   };
 
@@ -46,8 +52,24 @@ export default function MedicalReportDetails() {
     }
   };
 
-  if (loading) return <div className="page"><div className="empty">Loading analysis details...</div></div>;
-  if (error) return <div className="page"><div className="alert error">{error}</div></div>;
+  if (loading) return <div className="page"><div className="card empty">Loading analysis details...</div></div>;
+  if (error) {
+    return (
+      <div className="page">
+        <div className="card empty">
+          <p style={{ color: "#fb7185", marginBottom: "16px" }}>{error}</p>
+          <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+            <button className="primary-btn small" onClick={loadReport}>
+              Retry
+            </button>
+            <Link className="secondary-btn small" to="/medical-reports">
+              Back to Reports
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page">
